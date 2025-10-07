@@ -1,0 +1,33 @@
+# Rust
+target/
+Cargo.lock
+
+# Environment
+.env
+
+# Switch Development
+*.nro
+*.nacp
+*.elf
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Build artifacts
+dist/
+releases/

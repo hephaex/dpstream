@@ -1,0 +1,16 @@
+ 2997  nslookup google.com 8.8.8.8\ndig @8.8.8.8 api.anthropic.com
+ 2998  sudo sh -c 'echo "104.18.6.168 api.anthropic.com" >> /etc/hosts'\nsudo sh -c 'echo "104.18.7.168 api.anthropic.com" >> /etc/hosts'
+ 2999  cat /etc/hosts | grep anthropic
+ 3000  curl -I https://api.anthropic.com --connect-timeout 5
+ 3001  curl -I https://google.com --connect-timeout 5\ncurl -I https://github.com --connect-timeout 5
+ 3002  nc -zv 104.18.6.168 443\ntelnet 104.18.6.168 443
+ 3003  networksetup -listallhardwareports
+ 3004  sudo /System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -s\n
+ 3006  git clone git@github.com:hephaex/dpstream.git
+ 3011  brew reinstall pkgconf
+ 3015  sudo killall -HUP mDNSResponder
+ 3018  nslookup google.com
+ 3019  yy https://www.youtube.com/watch?v=Ghwqg2PbMtQ
+ 3020  brew update
+ 3021  yy https://www.youtube.com/watch?v=lzp1Z3TUKsk&pp=ugUEEgJrbw%3D%3D
+ 3022  cd Simon/dpstream

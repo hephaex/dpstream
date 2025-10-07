@@ -1,0 +1,59 @@
+[package]
+name = "dpstream-server"
+version = "1.0.0"
+edition = "2021"
+authors = ["hephaex@gmail.com"]
+description = "Dolphin Remote Gaming Server"
+license = "MIT"
+repository = "https://github.com/hephaex/dpstream"
+
+[dependencies]
+# Async Runtime
+tokio = { version = "1.40", features = ["full"] }
+async-trait = "0.1"
+
+# Network & Protocols
+hyper = "1.5"
+tungstenite = "0.24"
+
+# Multimedia Processing (optional for development)
+gstreamer = { version = "0.23", optional = true }
+gstreamer-app = { version = "0.23", optional = true }
+gstreamer-video = { version = "0.23", optional = true }
+
+# System Integration
+nix = { version = "0.29", optional = true }
+libc = "0.2"
+x11 = { version = "2.21", optional = true }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error Handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Environment
+dotenv = "0.15"
+
+# Date/Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Tailscale (placeholder - will need custom implementation)
+# tailscale-rs = "0.1"
+
+[features]
+default = []
+full = ["gstreamer", "gstreamer-app", "gstreamer-video", "nix", "x11"]
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bin]]
+name = "dpstream-server"
+path = "src/main.rs"

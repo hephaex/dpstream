@@ -1,0 +1,39 @@
+[package]
+name = "dpstream-client"
+version = "1.0.0"
+edition = "2021"
+authors = ["hephaex@gmail.com"]
+description = "Dolphin Remote Gaming Nintendo Switch Client"
+license = "MIT"
+repository = "https://github.com/hephaex/dpstream"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+# Core
+no-std-compat = "0.4"
+linked_list_allocator = "0.10"
+spin = "0.9"
+
+# Nintendo Switch Support (placeholders - will need actual implementations)
+# libnx-rs = { git = "https://github.com/aarch64-switch-rs/libnx-rs" }
+# nx = { git = "https://github.com/aarch64-switch-rs/nx" }
+
+# Network
+# native-tls = "0.2"
+
+# Error Handling
+# anyhow = { version = "1.0", default-features = false }
+
+# Serialization
+# serde = { version = "1.0", default-features = false, features = ["derive"] }
+
+[profile.release]
+lto = true
+opt-level = "z"
+codegen-units = 1
+panic = "abort"
+
+[target.aarch64-nintendo-switch-freestanding]
+rustflags = ["-C", "target-cpu=cortex-a57"]
