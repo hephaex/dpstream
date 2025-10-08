@@ -1,8 +1,8 @@
 use std::env;
-use std::process::{Command, Stdio};
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tokio::time::timeout;
+use tokio::process::Command;
 use tracing::{info, warn, error, debug};
 use crate::error::{Result, VpnError};
 
@@ -114,9 +114,8 @@ impl VpnManager {
         let output = timeout(Duration::from_secs(5), async {
             Command::new("tailscale")
                 .arg("version")
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
                 .output()
+                .await
         }).await
         .map_err(|_| VpnError::TailscaleNotAvailable("Command timeout".to_string()))?
         .map_err(|e| VpnError::TailscaleNotAvailable(format!("Failed to run tailscale command: {}", e)))?;
@@ -138,9 +137,8 @@ impl VpnManager {
         // Start tailscaled if not already running
         let output = Command::new("sudo")
             .args(&["systemctl", "start", "tailscaled"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
             .output()
+            .await
             .map_err(|e| VpnError::TailscaleNotAvailable(format!("Failed to start tailscaled: {}", e)))?;
 
         if !output.status.success() {
@@ -162,9 +160,8 @@ impl VpnManager {
         let output = timeout(Duration::from_secs(30), async {
             Command::new("tailscale")
                 .args(&["up", "--auth-key", &self.config.auth_key])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
                 .output()
+                .await
         }).await
         .map_err(|_| VpnError::AuthFailed("Authentication timeout".to_string()))?
         .map_err(|e| VpnError::AuthFailed(format!("Failed to authenticate: {}", e)))?;
@@ -184,9 +181,8 @@ impl VpnManager {
         // Set hostname
         let output = Command::new("tailscale")
             .args(&["set", "--hostname", &self.config.hostname])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
             .output()
+            .await
             .map_err(|e| VpnError::Config(format!("Failed to set hostname: {}", e)))?;
 
         if !output.status.success() {
@@ -199,9 +195,8 @@ impl VpnManager {
             let routes = self.config.advertise_routes.join(",");
             let output = Command::new("tailscale")
                 .args(&["set", "--advertise-routes", &routes])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
                 .output()
+                .await
                 .map_err(|e| VpnError::Config(format!("Failed to advertise routes: {}", e)))?;
 
             if !output.status.success() {
@@ -216,9 +211,8 @@ impl VpnManager {
         if self.config.accept_dns {
             let output = Command::new("tailscale")
                 .args(&["set", "--accept-dns"])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
                 .output()
+                .await
                 .map_err(|e| VpnError::Config(format!("Failed to configure DNS: {}", e)))?;
 
             if !output.status.success() {
@@ -264,9 +258,8 @@ impl VpnManager {
         let output = timeout(Duration::from_secs(10), async {
             Command::new("tailscale")
                 .args(&["status", "--json"])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
                 .output()
+                .await
         }).await
         .map_err(|_| VpnError::Timeout)?
         .map_err(|e| VpnError::TailscaleNotAvailable(format!("Failed to get status: {}", e)))?;
@@ -329,9 +322,8 @@ impl VpnManager {
 
         let output = Command::new("tailscale")
             .arg("down")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
             .output()
+            .await
             .map_err(|e| VpnError::TailscaleNotAvailable(format!("Failed to disconnect: {}", e)))?;
 
         if !output.status.success() {
@@ -378,9 +370,8 @@ impl VpnManager {
         let output = timeout(Duration::from_secs(5), async {
             Command::new("tailscale")
                 .args(&["ping", peer_ip])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
                 .output()
+                .await
         }).await
         .map_err(|_| VpnError::Timeout)?
         .map_err(|e| VpnError::NetworkUnreachable(format!("Failed to ping peer: {}", e)))?;

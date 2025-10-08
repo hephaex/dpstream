@@ -1,4 +1,4 @@
-use std::process::{Child, Command, Stdio};
+use tokio::process::{Child, Command};
 use std::env;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -92,8 +92,7 @@ impl DolphinManager {
            .arg(&self.config_path)
            .arg("--save")
            .arg(&self.save_path)
-           .stdout(Stdio::piped())
-           .stderr(Stdio::piped());
+           .kill_on_drop(true);
 
         let child = cmd.spawn()
             .map_err(|e| EmulatorError::StartupFailed {
@@ -101,7 +100,7 @@ impl DolphinManager {
             })?;
 
         let pid = child.id();
-        info!("Dolphin process started with PID: {}", pid);
+        info!("Dolphin process started with PID: {}", pid.unwrap_or(0));
         self.process = Some(child);
 
         // Wait for Dolphin startup with timeout
@@ -129,18 +128,18 @@ impl DolphinManager {
             }
             Ok(Err(e)) => {
                 error!("Dolphin startup failed: {}", e);
-                self.stop_game()?;
+                self.stop_game().await?;
                 Err(e.into())
             }
             Err(_) => {
                 error!("Dolphin startup timed out after {:?}", self.startup_timeout);
-                self.stop_game()?;
+                self.stop_game().await?;
                 Err(EmulatorError::StartupTimeout.into())
             }
         }
     }
 
-    pub fn stop_game(&mut self) -> Result<()> {
+    pub async fn stop_game(&mut self) -> Result<()> {
         // Stop process monitor first
         if let Some(monitor_handle) = self.process_monitor.take() {
             monitor_handle.abort();
@@ -150,9 +149,9 @@ impl DolphinManager {
         if let Some(mut process) = self.process.take() {
             info!("Stopping Dolphin process");
 
-            match process.kill() {
+            match process.kill().await {
                 Ok(_) => {
-                    process.wait().ok();
+                    let _ = process.wait().await;
                     self.window_id = None;
                     info!("Dolphin process stopped successfully");
                     Ok(())
@@ -168,7 +167,7 @@ impl DolphinManager {
         }
     }
 
-    pub fn is_running(&mut self) -> bool {
+    pub async fn is_running(&mut self) -> bool {
         if let Some(process) = &mut self.process {
             match process.try_wait() {
                 Ok(Some(status)) => {
@@ -270,9 +269,94 @@ impl Drop for DolphinManager {
     fn drop(&mut self) {
         if self.process.is_some() {
             debug!("Cleaning up Dolphin process on drop");
-            if let Err(e) = self.stop_game() {
-                error!("Failed to stop Dolphin process during cleanup: {}", e);
+            // Note: Cannot use async in Drop, process will be killed on drop due to kill_on_drop(true)
+            if let Some(monitor_handle) = self.process_monitor.take() {
+                monitor_handle.abort();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio_test;
+    use std::env;
+
+    fn setup_test_env() {
+        env::set_var("DOLPHIN_PATH", "/usr/bin/true"); // Use /bin/true for testing
+        env::set_var("ROM_PATH", "/tmp/test-roms");
+        env::set_var("SAVE_PATH", "/tmp/test-saves");
+        env::set_var("DOLPHIN_CONFIG_PATH", "/tmp/test-config");
+        env::set_var("DOLPHIN_STARTUP_TIMEOUT", "5");
+    }
+
+    #[tokio::test]
+    async fn test_dolphin_manager_creation() {
+        setup_test_env();
+
+        let result = DolphinManager::new("100.64.0.1".to_string());
+        assert!(result.is_ok(), "DolphinManager creation should succeed");
+
+        let manager = result.unwrap();
+        assert_eq!(manager.tailscale_ip, "100.64.0.1");
+        assert!(!manager.is_running().await);
+    }
+
+    #[tokio::test]
+    async fn test_invalid_executable_path() {
+        env::set_var("DOLPHIN_PATH", "/nonexistent/path");
+
+        let result = DolphinManager::new("100.64.0.1".to_string());
+        assert!(result.is_err(), "Should fail with invalid executable path");
+    }
+
+    #[tokio::test]
+    async fn test_process_lifecycle() {
+        setup_test_env();
+
+        let mut manager = DolphinManager::new("100.64.0.1".to_string()).unwrap();
+
+        // Create a dummy ROM file for testing
+        std::fs::create_dir_all("/tmp/test-roms").ok();
+        std::fs::write("/tmp/test-roms/test.iso", "dummy content").unwrap();
+
+        // Start game should work with /bin/true
+        let result = manager.start_game("test.iso").await;
+        assert!(result.is_ok(), "Game start should succeed with test executable");
+
+        // Should be running
+        assert!(manager.is_running().await, "Process should be running");
+
+        // Stop should work
+        let stop_result = manager.stop_game().await;
+        assert!(stop_result.is_ok(), "Game stop should succeed");
+
+        // Should no longer be running
+        assert!(!manager.is_running().await, "Process should be stopped");
+    }
+
+    #[tokio::test]
+    async fn test_nonexistent_rom() {
+        setup_test_env();
+
+        let mut manager = DolphinManager::new("100.64.0.1".to_string()).unwrap();
+
+        let result = manager.start_game("nonexistent.iso").await;
+        assert!(result.is_err(), "Should fail with nonexistent ROM");
+    }
+
+    #[tokio::test]
+    async fn test_multiple_stop_calls() {
+        setup_test_env();
+
+        let mut manager = DolphinManager::new("100.64.0.1".to_string()).unwrap();
+
+        // Multiple stop calls should not fail
+        let result1 = manager.stop_game().await;
+        let result2 = manager.stop_game().await;
+
+        assert!(result1.is_ok(), "First stop should succeed");
+        assert!(result2.is_ok(), "Second stop should succeed");
     }
 }

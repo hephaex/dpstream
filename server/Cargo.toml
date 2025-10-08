@@ -8,23 +8,23 @@ license = "MIT"
 repository = "https://github.com/hephaex/dpstream"
 
 [dependencies]
-# Async Runtime
-tokio = { version = "1.40", features = ["full"] }
+# Async Runtime - optimized features
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "time", "process", "signal", "fs", "net"] }
 async-trait = "0.1"
 
-# Network & Protocols
-hyper = "1.5"
-tungstenite = "0.24"
+# Network & Protocols - minimal feature sets
+hyper = { version = "1.5", features = ["client", "http1"] }
+tungstenite = { version = "0.24", default-features = false, features = ["rustls-tls-webpki-roots"] }
 mdns-sd = { version = "0.11", optional = true }  # Service discovery
-uuid = { version = "1.0", features = ["v4"] }
-socket2 = "0.5"                 # Low-level socket operations
+uuid = { version = "1.0", features = ["v4", "fast-rng"] }
+socket2 = { version = "0.5", features = ["all"] }
 tokio-util = { version = "0.7", features = ["codec", "net"] }
 hostname = "0.4"                # System hostname
 
-# TLS/Encryption
-rustls = "0.23"
-rustls-pemfile = "2.0"
-ring = "0.17"                   # Cryptographic operations
+# TLS/Encryption - conditional compilation
+rustls = { version = "0.23", optional = true }
+rustls-pemfile = { version = "2.0", optional = true }
+ring = { version = "0.17", optional = true }   # Cryptographic operations
 
 # Multimedia Processing (optional for development)
 gstreamer = { version = "0.23", optional = true }
@@ -58,15 +58,32 @@ chrono = { version = "0.4", features = ["serde"] }
 # tailscale-rs = "0.1"
 
 [features]
-default = ["crypto"]
-full = ["gstreamer", "gstreamer-app", "gstreamer-video", "nix", "x11", "crypto"]
-crypto = []                      # Cryptographic features
+default = ["crypto", "discovery"]
+full = ["gstreamer", "gstreamer-app", "gstreamer-video", "nix", "x11", "crypto", "discovery"]
+crypto = ["ring", "rustls"]                      # Cryptographic features
 streaming = ["gstreamer", "gstreamer-app", "gstreamer-video"]  # Media streaming
 system = ["nix", "x11"]         # System integration
 discovery = ["mdns-sd"]         # Service discovery
+minimal = []                    # Minimal build for testing
 
 [dev-dependencies]
 criterion = "0.5"
+tokio-test = "0.4"
+
+# Optimization profiles
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 1  # Slightly optimized for better dev experience
+
+[profile.bench]
+inherits = "release"
+debug = true
 
 [[bin]]
 name = "dpstream-server"

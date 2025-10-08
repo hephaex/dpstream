@@ -180,6 +180,7 @@ impl DiscoveryService {
     async fn discover_mdns_servers(timeout: Duration) -> Result<Vec<ServerInfo>> {
         use mdns_sd::{ServiceDaemon, ServiceEvent};
         use tokio::time::timeout as async_timeout;
+        use std::collections::HashMap;
 
         let daemon = ServiceDaemon::new().map_err(|e| {
             NetworkError::Discovery(format!("Failed to create discovery daemon: {}", e))
@@ -190,7 +191,8 @@ impl DiscoveryService {
             NetworkError::Discovery(format!("Failed to start service browsing: {}", e))
         })?;
 
-        let mut servers = Vec::new();
+        let mut servers = HashMap::new(); // Use HashMap to deduplicate
+        let mut discovered_count = 0;
 
         info!("Browsing for {} services...", service_type);
 
@@ -198,46 +200,83 @@ impl DiscoveryService {
             while let Ok(event) = receiver.recv_async().await {
                 match event {
                     ServiceEvent::ServiceResolved(service) => {
-                        debug!("Discovered service: {}", service.get_fullname());
+                        discovered_count += 1;
+                        debug!("Discovered service #{}: {}", discovered_count, service.get_fullname());
 
                         let properties = service.get_properties();
                         let hostname = properties.get("hostname")
                             .unwrap_or(&service.get_hostname().to_string())
                             .clone();
 
+                        // Get all IP addresses and prefer IPv4
+                        let addresses: Vec<_> = service.get_addresses().iter().collect();
+                        let ip = addresses.iter()
+                            .find(|addr| addr.is_ipv4())
+                            .or_else(|| addresses.first())
+                            .map(|addr| addr.to_string())
+                            .unwrap_or_else(|| "unknown".to_string());
+
                         let server_info = ServerInfo {
-                            hostname,
-                            ip: service.get_addresses().iter().next()
-                                .map(|addr| addr.to_string())
-                                .unwrap_or_else(|| "unknown".to_string()),
+                            hostname: hostname.clone(),
+                            ip,
                             port: service.get_port(),
                             version: properties.get("version")
                                 .unwrap_or(&"unknown".to_string())
                                 .clone(),
                             capabilities: properties.get("capabilities")
-                                .map(|caps| caps.split(',').map(String::from).collect())
+                                .map(|caps| caps.split(',')
+                                    .map(|s| s.trim().to_string())
+                                    .filter(|s| !s.is_empty())
+                                    .collect())
                                 .unwrap_or_default(),
                         };
 
-                        info!("Found server: {} at {}:{}",
-                              server_info.hostname, server_info.ip, server_info.port);
-                        servers.push(server_info);
+                        info!("Found server: {} at {}:{} (capabilities: {:?})",
+                              server_info.hostname, server_info.ip, server_info.port,
+                              server_info.capabilities);
+
+                        // Use hostname as key to deduplicate
+                        servers.insert(hostname, server_info);
+
+                        // Early exit if we found enough servers
+                        if servers.len() >= 10 {
+                            break;
+                        }
                     }
-                    ServiceEvent::ServiceRemoved(_, _) => {
-                        debug!("Service removed from network");
+                    ServiceEvent::ServiceRemoved(_, fullname) => {
+                        debug!("Service removed from network: {}", fullname);
+                        // Remove from our list if it exists
+                        servers.retain(|_, server| {
+                            let service_name = format!("{}._nvstream._tcp.local.", server.hostname);
+                            service_name != fullname
+                        });
                     }
-                    _ => {}
+                    ServiceEvent::SearchStarted(_) => {
+                        debug!("mDNS search started");
+                    }
+                    ServiceEvent::SearchStopped(_) => {
+                        debug!("mDNS search stopped");
+                        break;
+                    }
+                    _ => {
+                        debug!("Other mDNS event received");
+                    }
                 }
             }
         }).await {
-            Ok(_) => {}
+            Ok(_) => {
+                debug!("Discovery completed normally");
+            }
             Err(_) => {
-                debug!("Discovery timeout reached");
+                debug!("Discovery timeout reached after {:?}", timeout);
             }
         }
 
-        info!("Discovery completed, found {} servers", servers.len());
-        Ok(servers)
+        let server_list: Vec<ServerInfo> = servers.into_values().collect();
+        info!("Discovery completed, found {} unique servers from {} total discoveries",
+              server_list.len(), discovered_count);
+
+        Ok(server_list)
     }
 }
 
