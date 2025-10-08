@@ -73,10 +73,10 @@ dpstream is a high-performance remote gaming solution that enables streaming of 
 │                   Ubuntu 24.04 Server                    │
 │  ┌──────────────────────────────────────────────────┐   │
 │  │           Dolphin Emulator Core                  │   │
-│  │  - GameCube/Wii Emulation                       │   │
-│  │  - OpenGL/Vulkan Rendering                      │   │
+│  │  - GameCube/Wii Emulation                        │   │
+│  │  - OpenGL/Vulkan Rendering                       │   │
 │  └──────────────────────────────────────────────────┘   │
-│                          │                               │
+│                          │                              │
 │  ┌──────────────────────────────────────────────────┐   │
 │  │         Rust Streaming Server                    │   │
 │  │  • Tailscale VPN Integration                     │   │
@@ -89,11 +89,11 @@ dpstream is a high-performance remote gaming solution that enables streaming of 
                     Moonlight Protocol over Tailscale
                             │
 ┌─────────────────────────────────────────────────────────┐
-│              Nintendo Switch (CFW)                       │
+│              Nintendo Switch (CFW)                      │
 │  ┌──────────────────────────────────────────────────┐   │
 │  │         Switch Homebrew Client (Rust)            │   │
 │  │  • Tailscale Network Discovery                   │   │
-│  │  • Hardware H264 Decoding (Tegra X1)            │   │
+│  │  • Hardware H264 Decoding (Tegra X1)             │   │
 │  │  • Native Input Processing                       │   │
 │  │  • 720p/1080p Display Management                 │   │
 │  └──────────────────────────────────────────────────┘   │
