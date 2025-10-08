@@ -70,7 +70,7 @@ dpstream is a high-performance remote gaming solution that enables streaming of 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                   Ubuntu 24.04 Server                    │
+│                   Ubuntu 24.04 Server                   │
 │  ┌──────────────────────────────────────────────────┐   │
 │  │           Dolphin Emulator Core                  │   │
 │  │  - GameCube/Wii Emulation                        │   │
