@@ -113,9 +113,7 @@ $TASKS
 
 Next: $NEXT
 
-🤖 Generated with [Claude Code](https://claude.ai/code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
+Author: Mario Cho <hephaex@gmail.com>"
 
         echo -e "${YELLOW}Pushing to repository...${NC}"
         git push origin main || git push origin master || echo "Push failed - check branch name"
@@ -145,9 +143,7 @@ $TASKS
 
 Next: $NEXT
 
-🤖 Generated with [Claude Code](https://claude.ai/code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
+Author: Mario Cho <hephaex@gmail.com>"
 
         # Create tag for phase
         TAG_NAME="$(echo $PHASE | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/_/g')-$(date +%Y%m%d)"
@@ -176,9 +172,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
         git add .
         git commit -m "Backup: $DESCRIPTION
 
-🤖 Generated with [Claude Code](https://claude.ai/code)
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
+Author: Mario Cho <hephaex@gmail.com>"
 
         git push origin main || git push origin master || echo "Push failed - check branch name"
 
