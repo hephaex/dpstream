@@ -15,7 +15,7 @@ async-trait = "0.1"
 # Network & Protocols
 hyper = "1.5"
 tungstenite = "0.24"
-mdns-sd = "0.11"                # Service discovery
+mdns-sd = { version = "0.11", optional = true }  # Service discovery
 uuid = { version = "1.0", features = ["v4"] }
 socket2 = "0.5"                 # Low-level socket operations
 tokio-util = { version = "0.7", features = ["codec", "net"] }
@@ -46,7 +46,7 @@ thiserror = "1.0"
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Environment
 dotenv = "0.15"

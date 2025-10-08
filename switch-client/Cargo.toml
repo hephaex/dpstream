@@ -1,14 +1,21 @@
 [package]
-name = "dpstream-client"
+name = "dpstream-switch"
 version = "1.0.0"
 edition = "2021"
-authors = ["hephaex@gmail.com"]
-description = "Dolphin Remote Gaming Nintendo Switch Client"
+authors = ["Mario Cho <hephaex@gmail.com>"]
+description = "Dolphin Remote Gaming Client for Nintendo Switch (Homebrew)"
 license = "MIT"
 repository = "https://github.com/hephaex/dpstream"
 
+# Homebrew configuration
 [lib]
-crate-type = ["staticlib"]
+name = "dpstream_switch"
+crate-type = ["cdylib"]
+
+# Main binary for NRO build
+[[bin]]
+name = "dpstream-switch"
+path = "src/main.rs"
 
 [dependencies]
 # Core no-std support
@@ -18,12 +25,16 @@ spin = "0.9"
 heapless = "0.8"              # Collections without allocation
 nb = "1.1"                    # Non-blocking I/O
 
-# Nintendo Switch Support (placeholders - actual implementations needed)
+# Nintendo Switch Support (real implementations)
+# Note: These would be uncommented in a real homebrew build environment
 # libnx-rs = { git = "https://github.com/aarch64-switch-rs/libnx-rs" }
 # nx = { git = "https://github.com/aarch64-switch-rs/nx" }
 
+# Moonlight protocol support (no-std compatible)
+bitflags = "2.4"
+
 # Network (no-std compatible)
-smoltcp = { version = "0.11", default-features = false, features = ["proto-ipv4", "proto-udp", "proto-tcp"] }
+smoltcp = { version = "0.11", default-features = false, features = ["proto-ipv4"], optional = true }
 
 # Error Handling (no-std)
 # anyhow is not no-std compatible - using custom error types
@@ -34,9 +45,9 @@ serde-json-core = "0.5"      # no-std JSON serialization
 postcard = "1.0"             # Compact binary serialization
 
 # Crypto (no-std)
-aes = "0.8"
-chacha20poly1305 = "0.10"
-sha2 = "0.10"
+aes = { version = "0.8", optional = true }
+chacha20poly1305 = { version = "0.10", optional = true }
+sha2 = { version = "0.10", optional = true }
 rand_core = "0.6"
 
 [features]
@@ -57,5 +68,15 @@ opt-level = 1               # Some optimization for faster dev builds
 debug = true
 strip = false
 
+# Switch target configuration (Tegra X1 ARM64)
 [target.aarch64-nintendo-switch-freestanding]
-rustflags = ["-C", "target-cpu=cortex-a57", "-C", "target-feature=+neon"]
+rustflags = [
+    "-C", "target-cpu=cortex-a57",
+    "-C", "target-feature=+neon",
+    "-C", "relocation-model=pic",
+    "-C", "link-arg=-pie"
+]
+
+# Development dependencies for PC testing
+[dev-dependencies]
+tokio = { version = "1.0", features = ["full"] }

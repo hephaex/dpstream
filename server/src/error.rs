@@ -1,5 +1,6 @@
 // Centralized error handling for dpstream server
 use std::fmt;
+use std::time::Duration;
 use thiserror::Error;
 
 /// Main error type for dpstream server operations
@@ -67,11 +68,17 @@ pub enum EmulatorError {
     #[error("Dolphin process crashed with exit code {code}")]
     ProcessCrashed { code: i32 },
 
-    #[error("Window not found: {0}")]
-    WindowNotFound(String),
+    #[error("Dolphin window not found after timeout: {timeout:?}")]
+    WindowNotFound { timeout: Duration },
 
-    #[error("ROM file error: {0}")]
-    RomError(String),
+    #[error("ROM file not found: {path}")]
+    RomNotFound { path: String },
+
+    #[error("Dolphin startup timed out")]
+    StartupTimeout,
+
+    #[error("Process control operation '{operation}' failed: {reason}")]
+    ProcessControlFailed { operation: String, reason: String },
 
     #[error("Configuration error: {0}")]
     ConfigError(String),

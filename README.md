@@ -182,16 +182,14 @@ dpstream/
 
 This project follows an agile sprint methodology:
 
-- **Sprint 1 (Week 1-2)**: Project setup and research ✅
-- **Sprint 2 (Week 3-4)**: Core module development
+- **Sprint 1 (Week 1-2)**: Project setup and core architecture ✅
+- **Sprint 2 (Week 3-4)**: Enhanced integration and automation ✅
 - **Sprint 3 (Week 5-6)**: Media processing pipeline
 - **Sprint 4 (Week 7-8)**: Input system implementation
 - **Sprint 5 (Week 9-10)**: Performance optimization
 - **Sprint 6 (Week 11-12)**: User experience
 - **Sprint 7 (Week 13-14)**: Testing and debugging
 - **Sprint 8 (Week 15-16)**: Polish and release
-
-See `SPRINT_PLAN.md` for detailed roadmap.
 
 ## Performance
 
@@ -260,8 +258,12 @@ Enable debug overlay with: `L + R + Plus`
 ### Version 1.0 (Current)
 - [x] Basic server/client architecture
 - [x] Tailscale VPN integration
+- [x] Enhanced error handling system
+- [x] Switch homebrew base framework
+- [x] Advanced build automation
+- [x] Comprehensive testing framework
 - [ ] Full Dolphin integration
-- [ ] Switch homebrew client
+- [ ] Media processing pipeline
 - [ ] Performance optimization
 
 ### Version 1.1 (Q2 2024)

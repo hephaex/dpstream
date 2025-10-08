@@ -285,7 +285,7 @@ impl DolphinStreamHost {
     }
 
     async fn handle_launch_request(&mut self, params: HashMap<String, String>) -> Result<String> {
-        let app_id = params.get("appid").unwrap_or("1");
+        let app_id = params.get("appid").map_or("1", |v| v);
 
         info!("Launch request for app ID: {}", app_id);
 

@@ -1,12 +1,21 @@
 #!/bin/bash
 set -e
 
-# Build script for Dolphin Remote Gaming System
-# Usage: ./build.sh [debug|release] [server|client|all|test|clean] [--features feature1,feature2]
+# Advanced Build Script for Dolphin Remote Gaming System
+# Version: 2.0.0
+# Usage: ./build.sh [debug|release] [server|client|all|test|clean] [--features feature1,feature2] [--parallel] [--verbose]
 
 BUILD_TYPE=${1:-debug}
 TARGET=${2:-server}
 FEATURES=${3:-}
+PARALLEL=${4:-}
+VERBOSE=${5:-}
+
+# Configuration
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="$PROJECT_ROOT/build"
+ARTIFACTS_DIR="$PROJECT_ROOT/artifacts"
+LOG_DIR="$PROJECT_ROOT/logs"
 
 # Colors for output
 RED='\033[0;31m'

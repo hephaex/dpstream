@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     // Initialize Tailscale VPN
     debug!("Initializing Tailscale VPN manager...");
     let mut vpn = VpnManager::new().await.map_err(|e| {
-        let report = ErrorReport::new(DpstreamError::Vpn(e))
+        let report = ErrorReport::new(e)
             .with_context("Failed to initialize VPN manager".to_string())
             .with_correlation_id(session_id.clone());
         error!("{}", report.format_for_log());
@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
     // Connect to VPN
     debug!("Connecting to Tailscale network...");
     let tailscale_ip = vpn.connect().await.map_err(|e| {
-        let report = ErrorReport::new(DpstreamError::Vpn(e))
+        let report = ErrorReport::new(e)
             .with_context("Failed to connect to Tailscale network".to_string())
             .with_correlation_id(session_id.clone());
         error!("{}", report.format_for_log());
