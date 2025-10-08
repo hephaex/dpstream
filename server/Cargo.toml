@@ -15,6 +15,16 @@ async-trait = "0.1"
 # Network & Protocols
 hyper = "1.5"
 tungstenite = "0.24"
+mdns-sd = "0.11"                # Service discovery
+uuid = { version = "1.0", features = ["v4"] }
+socket2 = "0.5"                 # Low-level socket operations
+tokio-util = { version = "0.7", features = ["codec", "net"] }
+hostname = "0.4"                # System hostname
+
+# TLS/Encryption
+rustls = "0.23"
+rustls-pemfile = "2.0"
+ring = "0.17"                   # Cryptographic operations
 
 # Multimedia Processing (optional for development)
 gstreamer = { version = "0.23", optional = true }
@@ -48,8 +58,12 @@ chrono = { version = "0.4", features = ["serde"] }
 # tailscale-rs = "0.1"
 
 [features]
-default = []
-full = ["gstreamer", "gstreamer-app", "gstreamer-video", "nix", "x11"]
+default = ["crypto"]
+full = ["gstreamer", "gstreamer-app", "gstreamer-video", "nix", "x11", "crypto"]
+crypto = []                      # Cryptographic features
+streaming = ["gstreamer", "gstreamer-app", "gstreamer-video"]  # Media streaming
+system = ["nix", "x11"]         # System integration
+discovery = ["mdns-sd"]         # Service discovery
 
 [dev-dependencies]
 criterion = "0.5"

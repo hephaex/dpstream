@@ -1,17 +1,6 @@
 use std::env;
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum VpnError {
-    #[error("Configuration error: {0}")]
-    Config(String),
-    #[error("Connection error: {0}")]
-    Connection(String),
-    #[error("Environment variable missing: {0}")]
-    EnvVar(String),
-}
+use crate::error::VpnError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TailscaleConfig {
@@ -25,7 +14,7 @@ impl TailscaleConfig {
     pub fn from_env() -> Result<Self, VpnError> {
         Ok(Self {
             auth_key: env::var("TAILSCALE_AUTH_KEY")
-                .map_err(|_| VpnError::EnvVar("TAILSCALE_AUTH_KEY".to_string()))?,
+                .map_err(|_| VpnError::Config("TAILSCALE_AUTH_KEY environment variable not set".to_string()))?,
             hostname: env::var("TAILSCALE_HOSTNAME")
                 .unwrap_or_else(|_| "dpstream-server".to_string()),
             advertise_routes: env::var("TAILSCALE_ROUTES")
@@ -36,7 +25,7 @@ impl TailscaleConfig {
             accept_dns: env::var("TAILSCALE_ACCEPT_DNS")
                 .unwrap_or_else(|_| "true".to_string())
                 .parse()
-                .unwrap_or(true),
+                .map_err(|_| VpnError::Config("Invalid TAILSCALE_ACCEPT_DNS value".to_string()))?,
         })
     }
 }
