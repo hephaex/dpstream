@@ -135,7 +135,7 @@ make
 │  │  • Hardware H264 Decoding (Tegra X1)             │   │
 │  │  • ML + Quantum Input Processing                 │   │
 │  │  • Quantum-Optimized Memory Management           │   │
-│  │  • 720p/1080p Display with Quantum Efficiency   │   │
+│  │  • 720p/1080p Display with Quantum Efficiency    │   │
 │  └──────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
