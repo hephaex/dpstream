@@ -12,6 +12,8 @@ pub mod lock_free;
 pub mod memory_optimization;
 pub mod error_recovery;
 pub mod production_monitoring;
+pub mod compiler_optimization;
+pub mod advanced_networking;
 
 pub use moonlight::{MoonlightServer, ServerConfig};
 pub use health_server::HealthServer;
@@ -22,3 +24,5 @@ pub use lock_free::{LockFreeSessionRegistry, LockFreeRingBuffer, LockFreeMemoryP
 pub use memory_optimization::{StreamingAllocator, VideoFrameHandle, AudioBufferHandle, PacketHandle};
 pub use error_recovery::{ErrorRecoverySystem, ErrorContext, CircuitBreaker};
 pub use production_monitoring::{ProductionMonitoringSystem, ApplicationMetrics, HealthCheck};
+pub use compiler_optimization::{CompilerOptimizationSystem, ProfileGuidedOptimizer, BoltOptimizer, CompilerFlagOptimizer};
+pub use advanced_networking::{AdvancedNetworkingSystem, IoUringSystem, RdmaSystem, PacketProcessor};

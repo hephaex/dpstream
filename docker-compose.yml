@@ -1,5 +1,4 @@
 # Docker Compose configuration for dpstream development and production
-version: '3.8'
 
 services:
   # Main dpstream server
@@ -212,28 +211,4 @@ volumes:
   dpstream-grafana:
     driver: local
 
-# Development override
-# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
----
-# docker-compose.dev.yml (development overrides)
-version: '3.8'
-
-services:
-  dpstream-server:
-    build:
-      target: builder
-    environment:
-      - RUST_LOG=debug
-      - RUST_BACKTRACE=full
-    volumes:
-      - .:/app/source:ro  # Mount source for development
-    ports:
-      - "47989:47989"
-      - "8080:8080"
-    profiles:
-      - dev
-
-# Production override
-# Usage: docker-compose --profile production up
----
-# Production-specific configurations are included in main compose file with profiles
+# Development and production overrides are handled via profiles in main compose file
