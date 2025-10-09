@@ -291,7 +291,7 @@ Not affiliated with Nintendo, NVIDIA, or the Dolphin team.
 
 ## Contact
 
-- **Maintainer**: hephaex@gmail.com
+- **Maintainer**: Mario Cho <hephaex@gmail.com>
 - **Repository**: https://github.com/hephaex/dpstream
 - **Issues**: https://github.com/hephaex/dpstream/issues
 

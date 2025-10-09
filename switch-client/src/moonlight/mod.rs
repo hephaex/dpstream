@@ -2,9 +2,13 @@
 //!
 //! GameStream-compatible client for streaming from dpstream server
 
+pub mod audio;
+pub mod decoder;
+
 use crate::error::{Result, MoonlightError, NetworkError};
 use crate::input::{InputState, MoonlightInput};
 use crate::display::VideoFrame;
+use self::audio::{AudioPlayer, AudioFrame};
 use alloc::string::String;
 use alloc::vec::Vec;
 use heapless::Vec as HeaplessVec;
@@ -16,6 +20,7 @@ pub struct MoonlightClient {
     stream_config: StreamConfig,
     network: NetworkManager,
     decoder: VideoDecoder,
+    audio_player: Option<AudioPlayer>,
 }
 
 impl MoonlightClient {
@@ -27,6 +32,7 @@ impl MoonlightClient {
             stream_config: StreamConfig::default(),
             network: NetworkManager::new()?,
             decoder: VideoDecoder::new()?,
+            audio_player: None,
         })
     }
 
@@ -68,6 +74,23 @@ impl MoonlightClient {
         // Initialize decoder
         self.decoder.initialize(&self.stream_config)?;
 
+        // Initialize audio player
+        let audio_config = audio::AudioConfig {
+            sample_rate: self.stream_config.audio_config.sample_rate,
+            channels: self.stream_config.audio_config.channels,
+            bit_depth: 16,
+            buffer_count: 4,
+            buffer_size: 1024,
+            low_latency_mode: true,
+            volume: 1.0,
+            enable_effects: false,
+        };
+
+        let mut audio_player = AudioPlayer::new(audio_config)?;
+        audio_player.initialize()?;
+        audio_player.start_playback()?;
+        self.audio_player = Some(audio_player);
+
         Ok(())
     }
 
@@ -98,12 +121,37 @@ impl MoonlightClient {
         Ok(None)
     }
 
+    /// Receive and play an audio frame
+    pub fn receive_audio_frame(&mut self) -> Result<()> {
+        if self.state != ClientState::Streaming {
+            return Ok(());
+        }
+
+        // Check for incoming audio packets
+        if let Some(audio_frame) = self.network.receive_audio_packet()? {
+            // Queue frame for playback
+            if let Some(ref mut audio_player) = self.audio_player {
+                audio_player.queue_frame(audio_frame)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get audio playback statistics
+    pub fn get_audio_stats(&self) -> Option<audio::AudioStats> {
+        self.audio_player.as_ref().map(|player| player.get_stats())
+    }
+
     /// Disconnect from server
     pub fn disconnect(&mut self) -> Result<()> {
         match self.state {
             ClientState::Streaming => {
                 self.network.stop_stream()?;
                 self.decoder.cleanup()?;
+                if let Some(mut audio_player) = self.audio_player.take() {
+                    audio_player.shutdown()?;
+                }
             }
             ClientState::Connected => {
                 self.network.disconnect()?;
@@ -242,10 +290,11 @@ impl Default for AudioConfig {
 }
 
 /// Audio codec types
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AudioCodec {
     Opus,
-    Aac,
+    AAC,
+    PCM,
 }
 
 /// Network manager for Moonlight protocol
@@ -324,6 +373,11 @@ impl NetworkManager {
     }
 
     pub fn receive_video_packet(&mut self) -> Result<Option<VideoPacket>> {
+        // Mock implementation
+        Ok(None)
+    }
+
+    pub fn receive_audio_packet(&mut self) -> Result<Option<AudioFrame>> {
         // Mock implementation
         Ok(None)
     }

@@ -3,7 +3,7 @@ use std::fmt;
 use std::time::Duration;
 use thiserror::Error;
 
-/// Main error type for dpstream server operations
+/// Main error type for dpstream server operations with enhanced error codes
 #[derive(Error, Debug)]
 pub enum DpstreamError {
     #[error("Network error: {0}")]
@@ -32,6 +32,64 @@ pub enum DpstreamError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Resource exhaustion: {resource} - {details}")]
+    ResourceExhaustion { resource: String, details: String },
+
+    #[error("Hardware failure: {component} - {details}")]
+    HardwareFailure { component: String, details: String },
+
+    #[error("Memory allocation failed: requested {size} bytes")]
+    MemoryAllocation { size: usize },
+
+    #[error("Service unavailable: {service} - retry after {retry_after_ms}ms")]
+    ServiceUnavailable { service: String, retry_after_ms: u64 },
+}
+
+impl DpstreamError {
+    /// Get error code for programmatic handling
+    pub fn error_code(&self) -> u32 {
+        match self {
+            Self::Network(_) => 1000,
+            Self::Emulator(_) => 2000,
+            Self::Streaming(_) => 3000,
+            Self::Vpn(_) => 4000,
+            Self::Config(_) => 5000,
+            Self::Auth(_) => 6000,
+            Self::Io(_) => 7000,
+            Self::Serialization(_) => 8000,
+            Self::Internal(_) => 9000,
+            Self::ResourceExhaustion { .. } => 9100,
+            Self::HardwareFailure { .. } => 9200,
+            Self::MemoryAllocation { .. } => 9300,
+            Self::ServiceUnavailable { .. } => 9400,
+        }
+    }
+
+    /// Check if error is recoverable
+    pub fn is_recoverable(&self) -> bool {
+        match self {
+            Self::Network(net_err) => net_err.is_recoverable(),
+            Self::Streaming(stream_err) => stream_err.is_recoverable(),
+            Self::ServiceUnavailable { .. } => true,
+            Self::ResourceExhaustion { .. } => true,
+            Self::HardwareFailure { .. } => false,
+            Self::MemoryAllocation { .. } => false,
+            Self::Auth(_) => false,
+            _ => false,
+        }
+    }
+
+    /// Get recommended retry delay in milliseconds
+    pub fn retry_delay_ms(&self) -> Option<u64> {
+        match self {
+            Self::Network(_) => Some(1000),
+            Self::Streaming(_) => Some(500),
+            Self::ServiceUnavailable { retry_after_ms, .. } => Some(*retry_after_ms),
+            Self::ResourceExhaustion { .. } => Some(2000),
+            _ => None,
+        }
+    }
 }
 
 /// Network-related errors
@@ -54,6 +112,19 @@ pub enum NetworkError {
 
     #[error("Protocol error: {0}")]
     Protocol(String),
+}
+
+impl NetworkError {
+    pub fn is_recoverable(&self) -> bool {
+        match self {
+            Self::ConnectionFailed(_) => true,
+            Self::Timeout { .. } => true,
+            Self::Discovery(_) => true,
+            Self::DnsResolution(_) => true,
+            Self::BindError(_) => false,  // Port conflicts typically require intervention
+            Self::Protocol(_) => false,   // Protocol errors usually indicate bugs
+        }
+    }
 }
 
 /// Emulator-related errors
@@ -107,6 +178,32 @@ pub enum StreamingError {
 
     #[error("Bandwidth exceeded: current {current}bps, max {max}bps")]
     BandwidthExceeded { current: u64, max: u64 },
+
+    #[error("No buffers available for processing")]
+    NoBuffersAvailable,
+
+    #[error("Hardware acceleration not available: {reason}")]
+    HardwareAccelerationUnavailable { reason: String },
+
+    #[error("Frame processing failed: {reason}")]
+    FrameProcessingFailed { reason: String },
+}
+
+impl StreamingError {
+    pub fn is_recoverable(&self) -> bool {
+        match self {
+            Self::VideoEncodingFailed(_) => true,   // Can retry with different settings
+            Self::AudioEncodingFailed(_) => true,   // Can retry with different settings
+            Self::CaptureInitFailed(_) => false,    // Hardware/setup issue
+            Self::StreamSetupFailed(_) => false,    // Configuration issue
+            Self::UnsupportedCodec { .. } => false, // Client compatibility issue
+            Self::ClientDisconnected { .. } => false, // Client initiated
+            Self::BandwidthExceeded { .. } => true, // Can reduce quality
+            Self::NoBuffersAvailable => true,       // Temporary resource issue
+            Self::HardwareAccelerationUnavailable { .. } => false, // Hardware limitation
+            Self::FrameProcessingFailed { .. } => true, // Can retry
+        }
+    }
 }
 
 /// VPN-related errors

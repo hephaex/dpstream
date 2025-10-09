@@ -2,7 +2,7 @@
 name = "dpstream-server"
 version = "1.0.0"
 edition = "2021"
-authors = ["hephaex@gmail.com"]
+authors = ["Mario Cho <hephaex@gmail.com>"]
 description = "Dolphin Remote Gaming Server"
 license = "MIT"
 repository = "https://github.com/hephaex/dpstream"
@@ -11,6 +11,14 @@ repository = "https://github.com/hephaex/dpstream"
 # Async Runtime - optimized features
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "time", "process", "signal", "fs", "net"] }
 async-trait = "0.1"
+
+# Performance optimizations
+parking_lot = "0.12"    # High-performance synchronization primitives
+crossbeam = "0.8"       # Lock-free data structures
+crossbeam-channel = "0.5"  # High-performance channels
+arc-swap = "1.6"        # Atomic Arc swapping
+rayon = "1.8"           # Data parallelism
+num_cpus = "1.16"       # CPU core detection
 
 # Network & Protocols - minimal feature sets
 hyper = { version = "1.5", features = ["client", "http1"] }

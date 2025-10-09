@@ -6,33 +6,30 @@ use tokio::time::timeout;
 use tracing::{info, warn, error, debug};
 use crate::error::{Result, EmulatorError};
 
+/// Dolphin emulator configuration
+#[derive(Debug, Clone)]
+pub struct DolphinConfig {
+    pub executable_path: String,
+    pub rom_directory: String,
+    pub save_directory: String,
+    pub window_title: String,
+    pub enable_graphics_mods: bool,
+    pub enable_netplay: bool,
+    pub audio_backend: String,
+    pub video_backend: String,
+}
+
 pub struct DolphinManager {
+    config: DolphinConfig,
     process: Option<Child>,
     window_id: Option<u64>,
-    tailscale_ip: String,
-    executable_path: String,
-    rom_path: String,
-    save_path: String,
-    config_path: String,
     startup_timeout: Duration,
     process_monitor: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl DolphinManager {
-    pub fn new(tailscale_ip: String) -> Result<Self> {
-        info!("Initializing Dolphin manager for Tailscale IP: {}", tailscale_ip);
-
-        let executable_path = env::var("DOLPHIN_PATH")
-            .unwrap_or_else(|_| "/usr/bin/dolphin-emu".to_string());
-
-        let rom_path = env::var("ROM_PATH")
-            .unwrap_or_else(|_| "/srv/games/gc-wii".to_string());
-
-        let save_path = env::var("SAVE_PATH")
-            .unwrap_or_else(|_| "/srv/saves".to_string());
-
-        let config_path = env::var("DOLPHIN_CONFIG_PATH")
-            .unwrap_or_else(|_| "/tmp/dpstream-dolphin".to_string());
+    pub fn new(config: DolphinConfig) -> Result<Self> {
+        info!("Initializing Dolphin manager with config: {:?}", config);
 
         let startup_timeout = Duration::from_secs(
             env::var("DOLPHIN_STARTUP_TIMEOUT")
@@ -42,41 +39,38 @@ impl DolphinManager {
         );
 
         // Verify Dolphin executable exists
-        if !Path::new(&executable_path).exists() {
+        if !Path::new(&config.executable_path).exists() {
             return Err(EmulatorError::ExecutableNotFound {
-                path: executable_path
+                path: config.executable_path.clone()
             }.into());
         }
 
         // Create necessary directories
-        for dir in &[&rom_path, &save_path, &config_path] {
+        for dir in &[&config.rom_directory, &config.save_directory] {
             if let Err(e) = std::fs::create_dir_all(dir) {
                 warn!("Failed to create directory {}: {}", dir, e);
             }
         }
 
         debug!("Dolphin configuration:");
-        debug!("  Executable: {}", executable_path);
-        debug!("  ROM path: {}", rom_path);
-        debug!("  Save path: {}", save_path);
-        debug!("  Config path: {}", config_path);
+        debug!("  Executable: {}", config.executable_path);
+        debug!("  ROM directory: {}", config.rom_directory);
+        debug!("  Save directory: {}", config.save_directory);
+        debug!("  Audio backend: {}", config.audio_backend);
+        debug!("  Video backend: {}", config.video_backend);
         debug!("  Startup timeout: {:?}", startup_timeout);
 
         Ok(Self {
+            config,
             process: None,
             window_id: None,
-            tailscale_ip,
-            executable_path,
-            rom_path,
-            save_path,
-            config_path,
             startup_timeout,
             process_monitor: None,
         })
     }
 
     pub async fn start_game(&mut self, rom_name: &str) -> Result<()> {
-        let rom_path = format!("{}/{}", self.rom_path, rom_name);
+        let rom_path = format!("{}/{}", self.config.rom_directory, rom_name);
 
         if !std::path::Path::new(&rom_path).exists() {
             return Err(EmulatorError::RomNotFound { path: rom_path }.into());
@@ -84,14 +78,16 @@ impl DolphinManager {
 
         info!("Starting Dolphin with ROM: {}", rom_path);
 
-        let mut cmd = Command::new(&self.executable_path);
+        let mut cmd = Command::new(&self.config.executable_path);
         cmd.arg("--exec")
            .arg(&rom_path)
            .arg("--nogui")
-           .arg("--user")
-           .arg(&self.config_path)
            .arg("--save")
-           .arg(&self.save_path)
+           .arg(&self.config.save_directory)
+           .arg("--audio-backend")
+           .arg(&self.config.audio_backend)
+           .arg("--video-backend")
+           .arg(&self.config.video_backend)
            .kill_on_drop(true);
 
         let child = cmd.spawn()
@@ -262,6 +258,24 @@ impl DolphinManager {
         self.process = None;
         self.window_id = None;
         debug!("Process cleanup completed");
+    }
+
+    /// Shutdown the Dolphin manager and cleanup all resources
+    pub async fn shutdown(&mut self) -> Result<()> {
+        info!("Shutting down Dolphin manager");
+
+        // Stop any running game
+        if self.process.is_some() {
+            self.stop_game().await?;
+        }
+
+        // Abort monitoring task if running
+        if let Some(monitor_handle) = self.process_monitor.take() {
+            monitor_handle.abort();
+        }
+
+        info!("Dolphin manager shutdown complete");
+        Ok(())
     }
 }
 
