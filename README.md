@@ -330,11 +330,6 @@ Enable debug overlay with: `L + R + Plus`
 - [x] **Production deployment** with Docker/K8s support
 - [x] **Enterprise monitoring** with Prometheus/Grafana and AI-powered analytics
 - [ ] Compiler-level optimizations (PGO, BOLT)
-- [ ] Advanced networking optimization (io_uring, RDMA)
-- [ ] Android/iOS native apps with GPU acceleration
-- [ ] Multi-server support and load balancing
-- [ ] Enhanced ML models for edge devices
-
 
 ### License
 
