@@ -10,7 +10,7 @@
 
 ## Overview
 
-dpstream is remote gaming solution that enables high-performance streaming of GameCube and Wii games from Ubuntu 24.04 servers to Nintendo Switch devices with custom firmware. Built entirely in Rust with advanced performance optimizations, it achieves **industry-leading latency and throughput** using the proven Moonlight/GameStream protocol over secure Tailscale VPN connections.
+dpstream is remote gaming solution that enables high-performance streaming of GameCube and Wii games from Ubuntu 24.04 servers to Nintendo Switch devices with custom firmware. Built entirely in Rust with advanced performance optimizations, it achieves **latency and throughput** using the proven Moonlight/GameStream protocol over secure Tailscale VPN connections.
 
 ### Key Features
 
