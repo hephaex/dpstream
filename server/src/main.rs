@@ -6,11 +6,13 @@ mod emulator;
 mod streaming;
 mod network;
 mod error;
+mod input;
 
 use error::{Result, DpstreamError, ErrorReport};
 use network::VpnManager;
 use streaming::{MoonlightServer, ServerConfig};
 use emulator::{DolphinManager, DolphinConfig};
+use input::ServerInputManager;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -105,6 +107,21 @@ async fn main() -> Result<()> {
 
     info!("Dolphin emulator manager initialized");
 
+    // Initialize input manager
+    debug!("Initializing input manager...");
+    let input_manager = ServerInputManager::new().map_err(|e| {
+        let report = ErrorReport::new(e)
+            .with_context("Failed to initialize input manager".to_string())
+            .with_correlation_id(session_id.clone());
+        error!("{}", report.format_for_log());
+        report.error
+    })?;
+
+    info!("Input manager initialized");
+
+    // Connect input manager to streaming server
+    streaming_server.set_input_manager(input_manager);
+
     info!("Server initialization complete");
     info!("Ready to accept client connections");
 
@@ -114,6 +131,7 @@ async fn main() -> Result<()> {
             error!("Streaming server error: {}", e);
         }
     });
+
 
     // Setup graceful shutdown
     tokio::select! {

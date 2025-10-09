@@ -4,6 +4,7 @@
 
 use crate::error::{Result, StreamingError};
 use crate::streaming::capture::{VideoFrame, VideoCapture, VideoCaptureConfig};
+use crate::input::{MoonlightInputPacket, ServerInputManager};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -19,6 +20,7 @@ pub struct MoonlightServer {
     sessions: Arc<Mutex<HashMap<Uuid, StreamingSession>>>,
     video_broadcast: broadcast::Sender<VideoFrame>,
     audio_broadcast: broadcast::Sender<AudioFrame>,
+    input_manager: Arc<Mutex<Option<ServerInputManager>>>,
     is_running: Arc<Mutex<bool>>,
 }
 
@@ -109,7 +111,7 @@ pub struct AudioStream {
 /// Input handling component
 #[derive(Debug)]
 pub struct InputHandler {
-    receiver: mpsc::UnboundedReceiver<InputEvent>,
+    sender: mpsc::UnboundedSender<MoonlightInputPacket>,
 }
 
 /// Stream statistics
@@ -288,6 +290,7 @@ impl MoonlightServer {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             video_broadcast,
             audio_broadcast,
+            input_manager: Arc::new(Mutex::new(None)),
             is_running: Arc::new(Mutex::new(false)),
         })
     }
@@ -295,6 +298,36 @@ impl MoonlightServer {
     /// Get the server port
     pub fn port(&self) -> u16 {
         self.config.port
+    }
+
+    /// Set the input manager for handling client input
+    pub fn set_input_manager(&self, input_manager: ServerInputManager) {
+        *self.input_manager.lock().unwrap() = Some(input_manager);
+    }
+
+    /// Convert ControllerInput to MoonlightInputPacket
+    fn convert_controller_input_to_moonlight(&self, controller_id: u8, input: ControllerInput) -> MoonlightInputPacket {
+        MoonlightInputPacket {
+            packet_type: 0x0C, // Controller input packet type
+            button_flags: input.buttons as u16,
+            left_trigger: input.left_trigger,
+            right_trigger: input.right_trigger,
+            left_stick_x: input.left_stick_x,
+            left_stick_y: input.left_stick_y,
+            right_stick_x: input.right_stick_x,
+            right_stick_y: input.right_stick_y,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+            gyro_x: None,
+            gyro_y: None,
+            gyro_z: None,
+            accel_x: None,
+            accel_y: None,
+            accel_z: None,
+            touch_points: None,
+        }
     }
 
     /// Run the server main loop
@@ -469,6 +502,19 @@ impl MoonlightServer {
             }
         });
 
+        // Set up input handling
+        let input_sender = {
+            let input_manager_guard = sessions.lock().unwrap();
+            // Note: We need to get the input manager from the server instance
+            // For now, we'll create the sender here and connect it later
+            let (input_tx, input_rx) = mpsc::unbounded_channel();
+
+            // TODO: Register this receiver with the input manager
+            // This requires refactoring to pass the input manager reference
+
+            input_tx
+        };
+
         // Update session with streams
         {
             let mut sessions_guard = sessions.lock().unwrap();
@@ -480,6 +526,9 @@ impl MoonlightServer {
                 session.audio_stream = Some(AudioStream {
                     sender: audio_tx,
                     stats: StreamStats::default(),
+                });
+                session.input_handler = Some(InputHandler {
+                    sender: input_sender,
                 });
             }
         }
@@ -493,15 +542,20 @@ impl MoonlightServer {
                 // Handle video frames
                 frame = video_rx.recv() => {
                     if let Some(_frame) = frame {
-                        // TODO: Send video frame to client
-                        // This would encode the frame and send via UDP or TCP
+                        // Send video frame to client via UDP
+                        if let Err(e) = self.send_video_frame_to_client(&frame, &session_id).await {
+                            error!("Failed to send video frame to client {}: {}", session_id, e);
+                        }
                     }
                 }
 
                 // Handle audio frames
                 frame = audio_rx.recv() => {
                     if let Some(_frame) = frame {
-                        // TODO: Send audio frame to client
+                        // Send audio frame to client via UDP
+                        if let Err(e) = self.send_audio_frame_to_client(&frame, &session_id).await {
+                            error!("Failed to send audio frame to client {}: {}", session_id, e);
+                        }
                     }
                 }
 
@@ -514,8 +568,10 @@ impl MoonlightServer {
                     match stream.try_read(&mut buffer) {
                         Ok(0) => break, // Connection closed
                         Ok(n) => {
-                            // TODO: Parse control messages
-                            debug!("Received {} bytes from client", n);
+                            // Parse control messages (RTCP, input events, etc.)
+                            if let Err(e) = self.parse_control_message(&buffer[..n], &session_id).await {
+                                warn!("Failed to parse control message from client {}: {}", session_id, e);
+                            }
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                             continue;
@@ -607,6 +663,95 @@ impl MoonlightServer {
             audio_sample_rate: 48000,
             audio_channels: 2,
         })
+    }
+
+    /// Send video frame to specific client
+    async fn send_video_frame_to_client(&self, frame: &Option<VideoFrame>, session_id: &Uuid) -> Result<()> {
+        if let Some(frame) = frame {
+            // In a real implementation, this would encode the frame and send via UDP
+            debug!("Sending video frame {} to client {}", frame.frame_number, session_id);
+
+            // TODO: Implement actual H264 encoding and UDP transmission
+            // This would involve:
+            // 1. H264 encoding of the frame
+            // 2. RTP packetization
+            // 3. UDP transmission to client
+        }
+        Ok(())
+    }
+
+    /// Send audio frame to specific client
+    async fn send_audio_frame_to_client(&self, frame: &Option<AudioFrame>, session_id: &Uuid) -> Result<()> {
+        if let Some(frame) = frame {
+            debug!("Sending audio frame ({}ms) to client {}", frame.timestamp, session_id);
+
+            // TODO: Implement actual audio encoding and UDP transmission
+            // This would involve:
+            // 1. Opus/AAC encoding of the audio frame
+            // 2. RTP packetization
+            // 3. UDP transmission to client
+        }
+        Ok(())
+    }
+
+    /// Parse control messages from client
+    async fn parse_control_message(&self, data: &[u8], session_id: &Uuid) -> Result<()> {
+        if data.len() < 4 {
+            return Ok(());
+        }
+
+        // Parse message type (first 4 bytes)
+        let msg_type = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+
+        match msg_type {
+            0x0C => {
+                // Controller input message
+                if data.len() >= 20 {
+                    self.handle_controller_input(data, session_id).await?;
+                }
+            }
+            0x0A => {
+                // Keepalive message
+                debug!("Received keepalive from client {}", session_id);
+            }
+            _ => {
+                debug!("Unknown control message type: 0x{:02X} from client {}", msg_type, session_id);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Handle controller input from client
+    async fn handle_controller_input(&self, data: &[u8], session_id: &Uuid) -> Result<()> {
+        // Parse Moonlight controller input packet
+        if data.len() >= 20 {
+            let controller_input = ControllerInput {
+                buttons: u32::from_le_bytes([data[4], data[5], data[6], data[7]]),
+                left_stick_x: i16::from_le_bytes([data[8], data[9]]),
+                left_stick_y: i16::from_le_bytes([data[10], data[11]]),
+                right_stick_x: i16::from_le_bytes([data[12], data[13]]),
+                right_stick_y: i16::from_le_bytes([data[14], data[15]]),
+                left_trigger: data[16],
+                right_trigger: data[17],
+            };
+
+            // Convert to MoonlightInputPacket
+            let input_packet = self.convert_controller_input_to_moonlight(0, controller_input);
+
+            // Send to input manager if available
+            if let Some(input_manager) = self.input_manager.lock().unwrap().as_mut() {
+                // Register client if not already registered
+                if !input_manager.sessions.lock().unwrap().contains_key(session_id) {
+                    let _sender = input_manager.register_client(*session_id)?;
+                }
+
+                // TODO: Send input packet to the registered session
+                debug!("Processed controller input from client {}", session_id);
+            }
+        }
+
+        Ok(())
     }
 }
 

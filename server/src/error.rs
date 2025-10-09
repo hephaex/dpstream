@@ -15,6 +15,9 @@ pub enum DpstreamError {
     #[error("Streaming error: {0}")]
     Streaming(#[from] StreamingError),
 
+    #[error("Input error: {0}")]
+    Input(#[from] InputError),
+
     #[error("VPN error: {0}")]
     Vpn(#[from] VpnError),
 
@@ -53,6 +56,7 @@ impl DpstreamError {
             Self::Network(_) => 1000,
             Self::Emulator(_) => 2000,
             Self::Streaming(_) => 3000,
+            Self::Input(_) => 3500,
             Self::Vpn(_) => 4000,
             Self::Config(_) => 5000,
             Self::Auth(_) => 6000,
@@ -71,6 +75,7 @@ impl DpstreamError {
         match self {
             Self::Network(net_err) => net_err.is_recoverable(),
             Self::Streaming(stream_err) => stream_err.is_recoverable(),
+            Self::Input(_) => true, // Most input errors are recoverable
             Self::ServiceUnavailable { .. } => true,
             Self::ResourceExhaustion { .. } => true,
             Self::HardwareFailure { .. } => false,
@@ -153,6 +158,34 @@ pub enum EmulatorError {
 
     #[error("Configuration error: {0}")]
     ConfigError(String),
+}
+
+/// Input-related errors
+#[derive(Error, Debug)]
+pub enum InputError {
+    #[error("Input initialization failed: {reason}")]
+    InitializationFailed { reason: String },
+
+    #[error("Invalid player slot: {player} (must be 1-4)")]
+    InvalidPlayer { player: u8 },
+
+    #[error("Controller not connected for player {player}")]
+    ControllerNotConnected { player: u8 },
+
+    #[error("Input adapter not initialized")]
+    AdapterNotInitialized,
+
+    #[error("Command send failed: {reason}")]
+    CommandSendFailed { reason: String },
+
+    #[error("Configuration error in {field} with value '{value}': {reason}")]
+    ConfigurationError { field: String, value: String, reason: String },
+
+    #[error("Calibration failed: {reason}")]
+    CalibrationFailed { reason: String },
+
+    #[error("Input mapping error: {reason}")]
+    MappingError { reason: String },
 }
 
 /// Streaming-related errors
@@ -285,9 +318,14 @@ impl DpstreamError {
 
             DpstreamError::Config(_) => ErrorSeverity::High,
             DpstreamError::Auth(_) => ErrorSeverity::High,
+            DpstreamError::Input(_) => ErrorSeverity::Medium,
             DpstreamError::Io(_) => ErrorSeverity::Medium,
             DpstreamError::Serialization(_) => ErrorSeverity::Low,
             DpstreamError::Internal(_) => ErrorSeverity::Critical,
+            DpstreamError::ResourceExhaustion { .. } => ErrorSeverity::High,
+            DpstreamError::HardwareFailure { .. } => ErrorSeverity::Critical,
+            DpstreamError::MemoryAllocation { .. } => ErrorSeverity::Critical,
+            DpstreamError::ServiceUnavailable { .. } => ErrorSeverity::Medium,
         }
     }
 
@@ -306,6 +344,21 @@ impl DpstreamError {
             DpstreamError::Vpn(VpnError::AuthFailed(_)) => {
                 vec!["Check Tailscale authentication".to_string(), "Regenerate auth key".to_string()]
             }
+            DpstreamError::Input(_) => {
+                vec!["Check controller connection".to_string(), "Verify input configuration".to_string()]
+            }
+            DpstreamError::ResourceExhaustion { .. } => {
+                vec!["Free up system resources".to_string(), "Close unused applications".to_string()]
+            }
+            DpstreamError::HardwareFailure { .. } => {
+                vec!["Check hardware connections".to_string(), "Contact system administrator".to_string()]
+            }
+            DpstreamError::MemoryAllocation { .. } => {
+                vec!["Free system memory".to_string(), "Restart the application".to_string()]
+            }
+            DpstreamError::ServiceUnavailable { .. } => {
+                vec!["Wait for service to become available".to_string(), "Check service status".to_string()]
+            }
             _ => vec!["Check logs for more details".to_string()],
         }
     }
@@ -321,6 +374,21 @@ impl DpstreamError {
             }
             DpstreamError::Vpn(VpnError::AuthFailed(_)) => {
                 "VPN authentication failed. Please check your Tailscale configuration.".to_string()
+            }
+            DpstreamError::Input(_) => {
+                "Controller input error. Please check your input device connections.".to_string()
+            }
+            DpstreamError::ResourceExhaustion { .. } => {
+                "System resources exhausted. Please free up memory or CPU.".to_string()
+            }
+            DpstreamError::HardwareFailure { .. } => {
+                "Hardware failure detected. Please check your system hardware.".to_string()
+            }
+            DpstreamError::MemoryAllocation { .. } => {
+                "Memory allocation failed. System may be low on memory.".to_string()
+            }
+            DpstreamError::ServiceUnavailable { .. } => {
+                "Service temporarily unavailable. Please try again later.".to_string()
             }
             _ => format!("An error occurred: {}", self),
         }
