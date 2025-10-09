@@ -164,7 +164,7 @@ pub struct VideoCapture {
 }
 
 /// Capture performance statistics
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CaptureStats {
     pub frames_captured: u64,
     pub frames_dropped: u64,
@@ -278,12 +278,7 @@ impl VideoCapture {
 
     /// Get capture statistics
     pub fn get_stats(&self) -> CaptureStats {
-        let frame_count = *self.frame_counter.lock().unwrap();
-        CaptureStats {
-            frames_captured: frame_count,
-            is_active: self.is_capturing(),
-            config: self.config.clone(),
-        }
+        self.stats.lock().clone()
     }
 
     #[cfg(feature = "streaming")]
@@ -584,13 +579,6 @@ impl Drop for VideoCapture {
     }
 }
 
-/// Capture statistics
-#[derive(Debug, Clone)]
-pub struct CaptureStats {
-    pub frames_captured: u64,
-    pub is_active: bool,
-    pub config: VideoCaptureConfig,
-}
 
 #[cfg(test)]
 mod tests {

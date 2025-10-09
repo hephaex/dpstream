@@ -107,17 +107,6 @@ impl DpstreamError {
         }
     }
 
-    /// Generate user-friendly error message
-    pub fn user_message(&self) -> &'static str {
-        match self {
-            Self::Network(_) => "Network connection issue. Please check your internet connection.",
-            Self::Streaming(_) => "Streaming service temporarily unavailable. Retrying...",
-            Self::Auth(_) => "Authentication failed. Please check your credentials.",
-            Self::ResourceExhaustion { .. } => "System resources are low. Please try again later.",
-            Self::HardwareFailure { .. } => "Hardware issue detected. Please contact support.",
-            _ => "An unexpected error occurred. Please try again.",
-        }
-    }
 }
 
 /// Error severity levels for monitoring and alerting
@@ -314,6 +303,9 @@ pub enum StreamingError {
     #[error("Capture initialization failed: {0}")]
     CaptureInitFailed(String),
 
+    #[error("Initialization failed for {component}: {reason}")]
+    InitializationFailed { component: String, reason: String },
+
     #[error("Stream setup failed: {0}")]
     StreamSetupFailed(String),
 
@@ -334,6 +326,24 @@ pub enum StreamingError {
 
     #[error("Frame processing failed: {reason}")]
     FrameProcessingFailed { reason: String },
+
+    #[error("Pipeline error in {operation}: {reason}")]
+    PipelineError { operation: String, reason: String },
+
+    #[error("Encoder not available: {encoder} - {reason}")]
+    EncoderNotAvailable { encoder: String, reason: String },
+
+    #[error("Invalid packet data")]
+    InvalidPacket,
+
+    #[error("Configuration error in {field}: {reason}")]
+    ConfigurationError { field: String, reason: String },
+
+    #[error("Capture start failed: {reason}")]
+    CaptureStartFailed { reason: String },
+
+    #[error("Capture stop failed: {reason}")]
+    CaptureStopFailed { reason: String },
 }
 
 impl StreamingError {
@@ -342,6 +352,7 @@ impl StreamingError {
             Self::VideoEncodingFailed(_) => true,   // Can retry with different settings
             Self::AudioEncodingFailed(_) => true,   // Can retry with different settings
             Self::CaptureInitFailed(_) => false,    // Hardware/setup issue
+            Self::InitializationFailed { .. } => false, // Setup/configuration issue
             Self::StreamSetupFailed(_) => false,    // Configuration issue
             Self::UnsupportedCodec { .. } => false, // Client compatibility issue
             Self::ClientDisconnected { .. } => false, // Client initiated
@@ -349,6 +360,12 @@ impl StreamingError {
             Self::NoBuffersAvailable => true,       // Temporary resource issue
             Self::HardwareAccelerationUnavailable { .. } => false, // Hardware limitation
             Self::FrameProcessingFailed { .. } => true, // Can retry
+            Self::PipelineError { .. } => false,     // Pipeline configuration issue
+            Self::EncoderNotAvailable { .. } => false, // Hardware/driver issue
+            Self::InvalidPacket => true,             // Data corruption, can retry
+            Self::ConfigurationError { .. } => false, // Configuration issue
+            Self::CaptureStartFailed { .. } => false, // Setup issue
+            Self::CaptureStopFailed { .. } => true,  // Can force stop
         }
     }
 }
@@ -398,51 +415,7 @@ where
     }
 }
 
-/// Error severity levels for logging
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ErrorSeverity {
-    Low,      // Recoverable errors, warnings
-    Medium,   // Errors that affect functionality but don't crash
-    High,     // Critical errors that may cause service interruption
-    Critical, // Fatal errors that require immediate attention
-}
-
 impl DpstreamError {
-    /// Get the severity level of this error
-    pub fn severity(&self) -> ErrorSeverity {
-        match self {
-            DpstreamError::Network(NetworkError::Timeout { .. }) => ErrorSeverity::Low,
-            DpstreamError::Network(NetworkError::Discovery(_)) => ErrorSeverity::Medium,
-            DpstreamError::Network(_) => ErrorSeverity::High,
-
-            DpstreamError::Emulator(EmulatorError::ConfigError(_)) => ErrorSeverity::Medium,
-            DpstreamError::Emulator(EmulatorError::ProcessCrashed { .. }) => ErrorSeverity::High,
-            DpstreamError::Emulator(_) => ErrorSeverity::Critical,
-
-            DpstreamError::Streaming(StreamingError::ClientDisconnected { .. }) => {
-                ErrorSeverity::Low
-            }
-            DpstreamError::Streaming(StreamingError::BandwidthExceeded { .. }) => {
-                ErrorSeverity::Medium
-            }
-            DpstreamError::Streaming(_) => ErrorSeverity::High,
-
-            DpstreamError::Vpn(VpnError::Timeout) => ErrorSeverity::Medium,
-            DpstreamError::Vpn(_) => ErrorSeverity::High,
-
-            DpstreamError::Config(_) => ErrorSeverity::High,
-            DpstreamError::Auth(_) => ErrorSeverity::High,
-            DpstreamError::Input(_) => ErrorSeverity::Medium,
-            DpstreamError::Io(_) => ErrorSeverity::Medium,
-            DpstreamError::Serialization(_) => ErrorSeverity::Low,
-            DpstreamError::Internal(_) => ErrorSeverity::Critical,
-            DpstreamError::ResourceExhaustion { .. } => ErrorSeverity::High,
-            DpstreamError::HardwareFailure { .. } => ErrorSeverity::Critical,
-            DpstreamError::MemoryAllocation { .. } => ErrorSeverity::Critical,
-            DpstreamError::ServiceUnavailable { .. } => ErrorSeverity::Medium,
-        }
-    }
-
     /// Get suggested recovery actions
     pub fn recovery_suggestions(&self) -> Vec<String> {
         match self {
@@ -509,57 +482,6 @@ impl DpstreamError {
     }
 }
 
-/// Enhanced error reporting with context
-#[derive(Debug)]
-pub struct ErrorReport {
-    pub error: DpstreamError,
-    pub timestamp: chrono::DateTime<chrono::Utc>,
-    pub context: Option<String>,
-    pub correlation_id: Option<String>,
-}
-
-impl ErrorReport {
-    pub fn new(error: DpstreamError) -> Self {
-        Self {
-            error,
-            timestamp: chrono::Utc::now(),
-            context: None,
-            correlation_id: None,
-        }
-    }
-
-    pub fn with_context(mut self, context: String) -> Self {
-        self.context = Some(context);
-        self
-    }
-
-    pub fn with_correlation_id(mut self, id: String) -> Self {
-        self.correlation_id = Some(id);
-        self
-    }
-
-    /// Format error for logging
-    pub fn format_for_log(&self) -> String {
-        let mut msg = format!("ERROR [{}] {}", self.timestamp.format("%Y-%m-%d %H:%M:%S UTC"), self.error);
-
-        if let Some(context) = &self.context {
-            msg.push_str(&format!(" | Context: {}", context));
-        }
-
-        if let Some(correlation_id) = &self.correlation_id {
-            msg.push_str(&format!(" | ID: {}", correlation_id));
-        }
-
-        msg.push_str(&format!(" | Severity: {:?}", self.error.severity()));
-
-        let suggestions = self.error.recovery_suggestions();
-        if !suggestions.is_empty() {
-            msg.push_str(&format!(" | Suggestions: {}", suggestions.join(", ")));
-        }
-
-        msg
-    }
-}
 
 /// Macro for easy error creation with context
 #[macro_export]
