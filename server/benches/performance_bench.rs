@@ -100,11 +100,91 @@ fn bench_async_operations(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_streaming_performance(c: &mut Criterion) {
+    let mut group = c.benchmark_group("streaming_performance");
+
+    // Mock video frame data
+    let frame_data_720p = vec![0u8; 1280 * 720 * 3]; // RGB data
+    let frame_data_1080p = vec![0u8; 1920 * 1080 * 3]; // RGB data
+
+    group.bench_function("video_frame_copy_720p", |b| {
+        b.iter(|| {
+            let copied = frame_data_720p.clone();
+            criterion::black_box(copied);
+        });
+    });
+
+    group.bench_function("video_frame_copy_1080p", |b| {
+        b.iter(|| {
+            let copied = frame_data_1080p.clone();
+            criterion::black_box(copied);
+        });
+    });
+
+    group.bench_function("rtp_packet_parsing", |b| {
+        // Mock RTP packet
+        let rtp_packet = vec![
+            0x80, 0x60, 0x00, 0x01, // Version, PT, Sequence
+            0x00, 0x00, 0x00, 0x10, // Timestamp
+            0x12, 0x34, 0x56, 0x78, // SSRC
+            0x48, 0x65, 0x6c, 0x6c, 0x6f // Payload
+        ];
+
+        b.iter(|| {
+            // Mock parsing logic
+            let version = (rtp_packet[0] >> 6) & 0x03;
+            let payload_type = rtp_packet[1] & 0x7F;
+            let sequence = u16::from_be_bytes([rtp_packet[2], rtp_packet[3]]);
+            criterion::black_box((version, payload_type, sequence));
+        });
+    });
+
+    group.finish();
+}
+
+fn bench_optimized_data_structures(c: &mut Criterion) {
+    use dashmap::DashMap;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    let mut group = c.benchmark_group("data_structures");
+
+    // Standard HashMap with Mutex
+    let std_map = Arc::new(Mutex::new(HashMap::<u64, String>::new()));
+    // DashMap (concurrent)
+    let dash_map = Arc::new(DashMap::<u64, String>::new());
+
+    group.bench_function("hashmap_insert_mutex", |b| {
+        let map = std_map.clone();
+        b.iter(|| {
+            let mut guard = map.lock().unwrap();
+            for i in 0..100 {
+                guard.insert(i, format!("value_{}", i));
+            }
+            guard.clear();
+        });
+    });
+
+    group.bench_function("dashmap_insert", |b| {
+        let map = dash_map.clone();
+        b.iter(|| {
+            for i in 0..100 {
+                map.insert(i, format!("value_{}", i));
+            }
+            map.clear();
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_memory_allocation,
     bench_network_operations,
     bench_serialization,
-    bench_async_operations
+    bench_async_operations,
+    bench_streaming_performance,
+    bench_optimized_data_structures
 );
 criterion_main!(benches);

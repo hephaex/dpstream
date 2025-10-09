@@ -5,23 +5,36 @@
 use crate::error::{Result, StreamingError};
 use crate::streaming::capture::{VideoFrame, VideoCapture, VideoCaptureConfig};
 use crate::input::{MoonlightInputPacket, ServerInputManager};
-use std::collections::HashMap;
+use dashmap::DashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::RwLock;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use tokio::sync::{broadcast, mpsc};
+use flume::{Sender, Receiver, bounded, unbounded};
+use smallvec::SmallVec;
 use tracing::{info, debug, error, warn};
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
-/// Moonlight streaming server
+/// Moonlight streaming server with optimized concurrent access
 pub struct MoonlightServer {
     config: ServerConfig,
-    sessions: Arc<Mutex<HashMap<Uuid, StreamingSession>>>,
-    video_broadcast: broadcast::Sender<VideoFrame>,
-    audio_broadcast: broadcast::Sender<AudioFrame>,
-    input_manager: Arc<Mutex<Option<ServerInputManager>>>,
-    is_running: Arc<Mutex<bool>>,
+    sessions: Arc<DashMap<Uuid, StreamingSession>>,
+    video_broadcast: Sender<VideoFrame>,
+    audio_broadcast: Sender<AudioFrame>,
+    input_manager: Arc<RwLock<Option<ServerInputManager>>>,
+    is_running: Arc<parking_lot::Mutex<bool>>,
+    performance_monitor: Arc<PerformanceMonitor>,
+}
+
+/// Performance monitoring for optimization
+#[derive(Debug, Default)]
+pub struct PerformanceMonitor {
+    pub frames_processed: std::sync::atomic::AtomicU64,
+    pub avg_frame_time_us: std::sync::atomic::AtomicU64,
+    pub memory_usage_bytes: std::sync::atomic::AtomicU64,
+    pub active_sessions: std::sync::atomic::AtomicUsize,
+    pub network_bytes_sent: std::sync::atomic::AtomicU64,
 }
 
 /// Server configuration
@@ -94,24 +107,27 @@ pub enum SessionState {
     Terminated,
 }
 
-/// Video streaming component
+/// Optimized video streaming component with bounded channels
 #[derive(Debug)]
 pub struct VideoStream {
-    sender: mpsc::UnboundedSender<VideoFrame>,
+    sender: Sender<VideoFrame>,
     stats: StreamStats,
+    frame_buffer: SmallVec<[VideoFrame; 4]>, // Stack-allocated buffer for recent frames
 }
 
-/// Audio streaming component
+/// Optimized audio streaming component with bounded channels
 #[derive(Debug)]
 pub struct AudioStream {
-    sender: mpsc::UnboundedSender<AudioFrame>,
+    sender: Sender<AudioFrame>,
     stats: StreamStats,
+    sample_buffer: SmallVec<[AudioFrame; 8]>, // Stack-allocated buffer for audio frames
 }
 
-/// Input handling component
+/// High-performance input handling component
 #[derive(Debug)]
 pub struct InputHandler {
-    sender: mpsc::UnboundedSender<MoonlightInputPacket>,
+    sender: Sender<MoonlightInputPacket>,
+    input_buffer: SmallVec<[MoonlightInputPacket; 16]>, // Stack-allocated input buffer
 }
 
 /// Stream statistics

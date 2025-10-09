@@ -27,12 +27,136 @@ impl InputManager {
     pub fn update(&mut self) -> Result<()> {
         self.previous_state = self.current_state;
 
-        // In real implementation:
-        // hidScanInput();
-        // for each controller: hidGetControllerState()
+        // Scan input devices
+        self.scan_input_devices()?;
 
-        // Mock input for now
-        self.current_state = InputState::default();
+        // Update controller states
+        for i in 0..self.controllers.len() {
+            if self.controllers[i].is_connected {
+                self.update_controller_state(i)?;
+            }
+        }
+
+        // Update consolidated input state
+        self.update_consolidated_state()?;
+
+        Ok(())
+    }
+
+    /// Scan for connected input devices
+    fn scan_input_devices(&mut self) -> Result<()> {
+        // In real implementation: hidScanInput()
+
+        // Check handheld mode (built-in Joy-Cons)
+        self.controllers[0] = Controller {
+            controller_type: ControllerType::Handheld,
+            is_connected: true,
+            player_number: 0,
+            battery_level: 100, // Mock full battery
+            ..Default::default()
+        };
+
+        // Check for separate Joy-Cons and Pro Controllers
+        for i in 1..4 {
+            // Mock detection logic - in real implementation:
+            // Use hidGetControllerColors, hidGetControllerType, etc.
+            self.controllers[i].is_connected = false; // No additional controllers for now
+        }
+
+        Ok(())
+    }
+
+    /// Update state for a specific controller
+    fn update_controller_state(&mut self, controller_index: usize) -> Result<()> {
+        let controller = &mut self.controllers[controller_index];
+
+        // In real implementation: hidGetControllerState()
+        // For now, mock the state update
+
+        match controller.controller_type {
+            ControllerType::Handheld => {
+                self.update_handheld_state(controller)?;
+            }
+            ControllerType::JoyConLeft | ControllerType::JoyConRight => {
+                self.update_joycon_state(controller)?;
+            }
+            ControllerType::ProController => {
+                self.update_pro_controller_state(controller)?;
+            }
+            ControllerType::None => {}
+        }
+
+        Ok(())
+    }
+
+    /// Update handheld mode input (built-in Joy-Cons)
+    fn update_handheld_state(&mut self, controller: &mut Controller) -> Result<()> {
+        // In real implementation:
+        // - hidGetControllerState() for buttons and sticks
+        // - hidGetSixAxisSensorValues() for gyro/accelerometer
+        // - hidGetTouchScreenStates() for touch input
+
+        // Mock implementation - in production this would read actual hardware
+        controller.buttons = Buttons::empty();
+        controller.left_stick = AnalogStick { x: 0, y: 0 };
+        controller.right_stick = AnalogStick { x: 0, y: 0 };
+        controller.left_trigger = 0;
+        controller.right_trigger = 0;
+
+        // Mock gyroscope data (would come from hidGetSixAxisSensorValues)
+        controller.gyro = SixAxisSensor {
+            angular_velocity_x: 0.0,
+            angular_velocity_y: 0.0,
+            angular_velocity_z: 0.0,
+            acceleration_x: 0.0,
+            acceleration_y: 0.0,
+            acceleration_z: 9.8, // Gravity
+            orientation_w: 1.0,
+            orientation_x: 0.0,
+            orientation_y: 0.0,
+            orientation_z: 0.0,
+        };
+
+        // Update touch points (would come from hidGetTouchScreenStates)
+        controller.touch_points.clear();
+
+        Ok(())
+    }
+
+    /// Update Joy-Con specific state
+    fn update_joycon_state(&mut self, controller: &mut Controller) -> Result<()> {
+        // Joy-Con specific logic
+        // Similar to handheld but with individual Joy-Con handling
+        self.update_handheld_state(controller)
+    }
+
+    /// Update Pro Controller state
+    fn update_pro_controller_state(&mut self, controller: &mut Controller) -> Result<()> {
+        // Pro Controller specific logic
+        // Higher precision sticks, HD Rumble support
+        self.update_handheld_state(controller)
+    }
+
+    /// Update consolidated input state from all controllers
+    fn update_consolidated_state(&mut self) -> Result<()> {
+        // Combine input from all connected controllers
+        // Priority: Handheld > Pro Controller > Joy-Cons
+
+        for controller in &self.controllers {
+            if controller.is_connected {
+                // Use the first connected controller as primary
+                self.current_state = InputState {
+                    buttons: controller.buttons,
+                    left_stick: controller.left_stick,
+                    right_stick: controller.right_stick,
+                    left_trigger: controller.left_trigger,
+                    right_trigger: controller.right_trigger,
+                    gyro: controller.gyro,
+                    touch_points: controller.touch_points.clone(),
+                };
+                break;
+            }
+        }
 
         Ok(())
     }
@@ -91,9 +215,14 @@ impl InputManager {
         self.current_state.right_stick
     }
 
-    /// Get touch screen state
-    pub fn get_touch_state(&self) -> &TouchState {
-        &self.current_state.touch
+    /// Get touch points
+    pub fn get_touch_points(&self) -> &alloc::vec::Vec<TouchPoint> {
+        &self.current_state.touch_points
+    }
+
+    /// Get gyroscope data
+    pub fn get_gyro(&self) -> &SixAxisSensor {
+        &self.current_state.gyro
     }
 
     /// Cleanup input system
@@ -111,9 +240,8 @@ pub struct InputState {
     pub right_stick: AnalogStick,
     pub left_trigger: u8,
     pub right_trigger: u8,
-    pub touch: TouchState,
-    pub gyro: GyroState,
-    pub accelerometer: AccelState,
+    pub gyro: SixAxisSensor,
+    pub touch_points: alloc::vec::Vec<TouchPoint>,
 }
 
 /// Button flags
@@ -212,10 +340,32 @@ pub struct AccelState {
 /// Individual controller information
 #[derive(Debug, Clone, Default)]
 pub struct Controller {
-    pub id: u8,
     pub controller_type: ControllerType,
     pub is_connected: bool,
+    pub player_number: u8,
     pub battery_level: u8,
+    pub buttons: Buttons,
+    pub left_stick: AnalogStick,
+    pub right_stick: AnalogStick,
+    pub left_trigger: u8,
+    pub right_trigger: u8,
+    pub gyro: SixAxisSensor,
+    pub touch_points: alloc::vec::Vec<TouchPoint>,
+}
+
+/// Six-axis sensor data (gyroscope + accelerometer + orientation)
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SixAxisSensor {
+    pub angular_velocity_x: f32, // rad/s
+    pub angular_velocity_y: f32, // rad/s
+    pub angular_velocity_z: f32, // rad/s
+    pub acceleration_x: f32,     // m/s²
+    pub acceleration_y: f32,     // m/s²
+    pub acceleration_z: f32,     // m/s²
+    pub orientation_w: f32,      // Quaternion
+    pub orientation_x: f32,      // Quaternion
+    pub orientation_y: f32,      // Quaternion
+    pub orientation_z: f32,      // Quaternion
 }
 
 /// Controller types
@@ -265,6 +415,18 @@ impl InputState {
             left_stick_y: self.left_stick.y,
             right_stick_x: self.right_stick.x,
             right_stick_y: self.right_stick.y,
+            timestamp: 0, // Will be set by network layer
+            gyro_x: Some(self.gyro.angular_velocity_x),
+            gyro_y: Some(self.gyro.angular_velocity_y),
+            gyro_z: Some(self.gyro.angular_velocity_z),
+            accel_x: Some(self.gyro.acceleration_x),
+            accel_y: Some(self.gyro.acceleration_y),
+            accel_z: Some(self.gyro.acceleration_z),
+            touch_points: if !self.touch_points.is_empty() {
+                Some(self.touch_points.clone())
+            } else {
+                None
+            },
         }
     }
 }
@@ -280,4 +442,14 @@ pub struct MoonlightInput {
     pub left_stick_y: i16,
     pub right_stick_x: i16,
     pub right_stick_y: i16,
+    pub timestamp: u64,
+
+    // Extended Switch-specific data
+    pub gyro_x: Option<f32>,
+    pub gyro_y: Option<f32>,
+    pub gyro_z: Option<f32>,
+    pub accel_x: Option<f32>,
+    pub accel_y: Option<f32>,
+    pub accel_z: Option<f32>,
+    pub touch_points: Option<alloc::vec::Vec<TouchPoint>>,
 }

@@ -9,16 +9,21 @@ use alloc::collections::VecDeque;
 use core::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use core::ptr::NonNull;
 use heapless::Vec as HeaplessVec;
+use tinyvec::TinyVec;
 use spin::{Mutex, RwLock};
+use cache_padded::CachePadded;
+use once_cell::race::OnceNonZeroUsize;
 use crate::error::{Result, MemoryError};
 
-/// Lock-free ring buffer for high-performance frame streaming
+/// Cache-optimized lock-free ring buffer for high-performance frame streaming
+#[repr(align(64))] // Cache line alignment
 pub struct LockFreeRingBuffer<T> {
     buffer: Vec<T>,
     capacity: usize,
-    read_pos: AtomicUsize,
-    write_pos: AtomicUsize,
-    size: AtomicUsize,
+    // Cache-pad atomic variables to prevent false sharing
+    read_pos: CachePadded<AtomicUsize>,
+    write_pos: CachePadded<AtomicUsize>,
+    size: CachePadded<AtomicUsize>,
 }
 
 impl<T: Default + Clone> LockFreeRingBuffer<T> {
@@ -29,9 +34,9 @@ impl<T: Default + Clone> LockFreeRingBuffer<T> {
         Self {
             buffer,
             capacity,
-            read_pos: AtomicUsize::new(0),
-            write_pos: AtomicUsize::new(0),
-            size: AtomicUsize::new(0),
+            read_pos: CachePadded::new(AtomicUsize::new(0)),
+            write_pos: CachePadded::new(AtomicUsize::new(0)),
+            size: CachePadded::new(AtomicUsize::new(0)),
         }
     }
 
@@ -90,14 +95,31 @@ impl<T: Default + Clone> LockFreeRingBuffer<T> {
     }
 }
 
-/// Optimized memory pool for video frame buffers
+/// Switch-optimized memory pool for video frame buffers
+/// Uses stack-allocated pools and cache-aligned allocations
 pub struct OptimizedFramePool {
-    buffers: RwLock<VecDeque<NonNull<u8>>>,
+    buffers: RwLock<TinyVec<[NonNull<u8>; 8]>>, // Stack-allocated for small pools
     buffer_size: usize,
     total_buffers: usize,
-    allocated_count: AtomicUsize,
+    allocated_count: CachePadded<AtomicUsize>,
     stats: RwLock<PoolStats>,
+    // Pre-allocated static pools to reduce dynamic allocation
+    small_pool: CachePadded<RwLock<HeaplessVec<NonNull<u8>, 4>>>, // 720p frames
+    large_pool: CachePadded<RwLock<HeaplessVec<NonNull<u8>, 2>>>, // 1080p frames
 }
+
+/// Cache-optimized performance metrics
+#[derive(Debug, Clone)]
+pub struct SwitchPerformanceMetrics {
+    pub frame_decode_time_us: u32,
+    pub memory_pressure: u8,      // 0-100 percentage
+    pub cpu_temperature: u8,      // Temperature in Celsius
+    pub gpu_frequency_mhz: u16,   // Current GPU frequency
+    pub memory_frequency_mhz: u16, // Current memory frequency
+    pub power_consumption_mw: u16, // Power consumption in milliwatts
+}
+
+static PERFORMANCE_CACHE: OnceNonZeroUsize = OnceNonZeroUsize::new();
 
 #[derive(Debug, Default)]
 pub struct PoolStats {

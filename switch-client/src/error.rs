@@ -20,8 +20,18 @@ pub enum ClientError {
     Display(DisplayError),
     /// Input handling errors
     Input(InputError),
+    /// Audio processing errors
+    Audio(AudioError),
     /// Memory allocation errors
     Memory(MemoryError),
+    /// Audio buffer overflow
+    AudioBufferOverflow,
+    /// Audio decoder not initialized
+    AudioDecoderNotInitialized,
+    /// Audio underrun (no samples to play)
+    AudioUnderrun,
+    /// Invalid RTP packet format
+    InvalidPacket,
 }
 
 impl fmt::Display for ClientError {
@@ -32,7 +42,12 @@ impl fmt::Display for ClientError {
             ClientError::Moonlight(e) => write!(f, "Moonlight error: {}", e),
             ClientError::Display(e) => write!(f, "Display error: {}", e),
             ClientError::Input(e) => write!(f, "Input error: {}", e),
+            ClientError::Audio(e) => write!(f, "Audio error: {}", e),
             ClientError::Memory(e) => write!(f, "Memory error: {}", e),
+            ClientError::AudioBufferOverflow => write!(f, "Audio buffer overflow"),
+            ClientError::AudioDecoderNotInitialized => write!(f, "Audio decoder not initialized"),
+            ClientError::AudioUnderrun => write!(f, "Audio underrun"),
+            ClientError::InvalidPacket => write!(f, "Invalid RTP packet"),
         }
     }
 }
@@ -93,6 +108,7 @@ pub enum MoonlightError {
     DecodingError,
     ServerIncompatible,
     SessionTimeout,
+    InvalidPacket,
 }
 
 impl fmt::Display for MoonlightError {
@@ -105,6 +121,7 @@ impl fmt::Display for MoonlightError {
             MoonlightError::DecodingError => write!(f, "Video decoding error"),
             MoonlightError::ServerIncompatible => write!(f, "Server incompatible"),
             MoonlightError::SessionTimeout => write!(f, "Session timeout"),
+            MoonlightError::InvalidPacket => write!(f, "Invalid packet format"),
         }
     }
 }
@@ -142,6 +159,18 @@ pub enum InputError {
     CalibrationError,
 }
 
+/// Audio processing errors
+#[derive(Debug, Clone)]
+pub enum AudioError {
+    InitializationFailed,
+    DecodingFailed,
+    PlaybackFailed,
+    UnsupportedCodec,
+    BufferUnderrun,
+    DeviceError,
+    SampleRateError,
+}
+
 impl fmt::Display for InputError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -149,6 +178,20 @@ impl fmt::Display for InputError {
             InputError::ControllerDisconnected => write!(f, "Controller disconnected"),
             InputError::InvalidInputData => write!(f, "Invalid input data"),
             InputError::CalibrationError => write!(f, "Controller calibration error"),
+        }
+    }
+}
+
+impl fmt::Display for AudioError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AudioError::InitializationFailed => write!(f, "Audio initialization failed"),
+            AudioError::DecodingFailed => write!(f, "Audio decoding failed"),
+            AudioError::PlaybackFailed => write!(f, "Audio playback failed"),
+            AudioError::UnsupportedCodec => write!(f, "Unsupported audio codec"),
+            AudioError::BufferUnderrun => write!(f, "Audio buffer underrun"),
+            AudioError::DeviceError => write!(f, "Audio device error"),
+            AudioError::SampleRateError => write!(f, "Invalid sample rate"),
         }
     }
 }
@@ -201,6 +244,12 @@ impl From<DisplayError> for ClientError {
 impl From<InputError> for ClientError {
     fn from(err: InputError) -> Self {
         ClientError::Input(err)
+    }
+}
+
+impl From<AudioError> for ClientError {
+    fn from(err: AudioError) -> Self {
+        ClientError::Audio(err)
     }
 }
 

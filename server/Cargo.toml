@@ -19,6 +19,9 @@ crossbeam-channel = "0.5"  # High-performance channels
 arc-swap = "1.6"        # Atomic Arc swapping
 rayon = "1.8"           # Data parallelism
 num_cpus = "1.16"       # CPU core detection
+flume = "0.11"          # Ultra-fast MPSC channels (alternative to tokio channels)
+dashmap = "6.0"         # Concurrent hashmap with better performance than Arc<Mutex<HashMap>>
+smallvec = { version = "1.13", features = ["const_new", "union"] }  # Stack-allocated vectors
 
 # Network & Protocols - minimal feature sets
 hyper = { version = "1.5", features = ["client", "http1"] }
@@ -81,10 +84,19 @@ tokio-test = "0.4"
 # Optimization profiles
 [profile.release]
 codegen-units = 1
-lto = true
+lto = "fat"           # Enhanced LTO for maximum optimization
 opt-level = 3
 panic = "abort"
 strip = true
+overflow-checks = false  # Disable overflow checks in release
+debug-assertions = false # Disable debug assertions
+incremental = false      # Disable incremental for faster builds
+
+# Profile for deployment with profiling data
+[profile.release-with-debug]
+inherits = "release"
+debug = 2            # Full debug info for profiling
+strip = false        # Keep symbols for profiling
 
 [profile.dev]
 opt-level = 1  # Slightly optimized for better dev experience

@@ -188,7 +188,12 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
                 ClientError::Moonlight(_) => -3,
                 ClientError::Display(_) => -4,
                 ClientError::Input(_) => -5,
-                ClientError::Memory(_) => -6,
+                ClientError::Audio(_) => -6,
+                ClientError::Memory(_) => -7,
+                ClientError::AudioBufferOverflow => -8,
+                ClientError::AudioDecoderNotInitialized => -9,
+                ClientError::AudioUnderrun => -10,
+                ClientError::InvalidPacket => -11,
             }
         }
     }

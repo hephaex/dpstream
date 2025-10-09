@@ -95,6 +95,120 @@ impl DpstreamError {
             _ => None,
         }
     }
+
+    /// Get error severity level for monitoring and alerting
+    pub fn severity(&self) -> ErrorSeverity {
+        match self {
+            Self::HardwareFailure { .. } | Self::MemoryAllocation { .. } => ErrorSeverity::Critical,
+            Self::Auth(_) | Self::Config(_) => ErrorSeverity::High,
+            Self::Network(_) | Self::Streaming(_) | Self::ServiceUnavailable { .. } => ErrorSeverity::Medium,
+            Self::Input(_) | Self::Serialization(_) => ErrorSeverity::Low,
+            _ => ErrorSeverity::Medium,
+        }
+    }
+
+    /// Generate user-friendly error message
+    pub fn user_message(&self) -> &'static str {
+        match self {
+            Self::Network(_) => "Network connection issue. Please check your internet connection.",
+            Self::Streaming(_) => "Streaming service temporarily unavailable. Retrying...",
+            Self::Auth(_) => "Authentication failed. Please check your credentials.",
+            Self::ResourceExhaustion { .. } => "System resources are low. Please try again later.",
+            Self::HardwareFailure { .. } => "Hardware issue detected. Please contact support.",
+            _ => "An unexpected error occurred. Please try again.",
+        }
+    }
+}
+
+/// Error severity levels for monitoring and alerting
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorSeverity {
+    Low,      // Recoverable, minimal impact
+    Medium,   // May impact performance
+    High,     // Significant impact on functionality
+    Critical, // System failure, immediate attention required
+}
+/// Enhanced error reporting with context and correlation tracking
+#[derive(Debug, Clone)]
+pub struct ErrorReport {
+    pub error: DpstreamError,
+    pub context: Vec<String>,
+    pub correlation_id: Option<String>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub component: Option<String>,
+    pub retry_count: u32,
+}
+
+impl ErrorReport {
+    pub fn new(error: DpstreamError) -> Self {
+        Self {
+            error,
+            context: Vec::new(),
+            correlation_id: None,
+            timestamp: chrono::Utc::now(),
+            component: None,
+            retry_count: 0,
+        }
+    }
+
+    pub fn with_context(mut self, context: String) -> Self {
+        self.context.push(context);
+        self
+    }
+
+    pub fn with_correlation_id(mut self, correlation_id: String) -> Self {
+        self.correlation_id = Some(correlation_id);
+        self
+    }
+
+    pub fn with_component(mut self, component: String) -> Self {
+        self.component = Some(component);
+        self
+    }
+
+    pub fn with_retry_count(mut self, retry_count: u32) -> Self {
+        self.retry_count = retry_count;
+        self
+    }
+
+    /// Format error for structured logging
+    pub fn format_for_log(&self) -> String {
+        let context_str = if self.context.is_empty() {
+            String::new()
+        } else {
+            format!(" | Context: {}", self.context.join(" -> "))
+        };
+
+        let correlation_str = if let Some(ref id) = self.correlation_id {
+            format!(" | Correlation: {}", id)
+        } else {
+            String::new()
+        };
+
+        let component_str = if let Some(ref comp) = self.component {
+            format!(" | Component: {}", comp)
+        } else {
+            String::new()
+        };
+
+        let retry_str = if self.retry_count > 0 {
+            format!(" | Retry: {}", self.retry_count)
+        } else {
+            String::new()
+        };
+
+        format!(
+            "[{}] {} (Code: {}, Severity: {:?}){}{}{}{}",
+            self.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
+            self.error,
+            self.error.error_code(),
+            self.error.severity(),
+            context_str,
+            correlation_str,
+            component_str,
+            retry_str
+        )
+    }
 }
 
 /// Network-related errors
