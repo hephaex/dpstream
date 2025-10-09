@@ -34,5 +34,5 @@ dist/
 releases/
 artifacts/
 
-# Development history and Claude sessions
+# Development history and session logs
 .history/

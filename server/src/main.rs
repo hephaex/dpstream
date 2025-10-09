@@ -8,7 +8,9 @@ mod network;
 mod error;
 
 use error::{Result, DpstreamError, ErrorReport};
-use network::vpn::VpnManager;
+use network::VpnManager;
+use streaming::{MoonlightServer, ServerConfig};
+use emulator::{DolphinManager, DolphinConfig};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -52,29 +54,97 @@ async fn main() -> Result<()> {
 
     // Initialize streaming server
     debug!("Initializing streaming server...");
-    // TODO: Initialize streaming server with proper error handling
+    let streaming_config = ServerConfig {
+        bind_addr: tailscale_ip.clone(),
+        port: env::var("SERVER_PORT")
+            .unwrap_or_else(|_| "47989".to_string())
+            .parse()
+            .map_err(|e| DpstreamError::Config(format!("Invalid SERVER_PORT: {}", e)))?,
+        max_clients: env::var("MAX_CLIENTS")
+            .unwrap_or_else(|_| "4".to_string())
+            .parse()
+            .map_err(|e| DpstreamError::Config(format!("Invalid MAX_CLIENTS: {}", e)))?,
+        enable_encryption: true,
+        enable_authentication: true,
+        stream_timeout_ms: 30000,
+    };
+
+    let mut streaming_server = MoonlightServer::new(streaming_config).await.map_err(|e| {
+        let report = ErrorReport::new(e)
+            .with_context("Failed to initialize streaming server".to_string())
+            .with_correlation_id(session_id.clone());
+        error!("{}", report.format_for_log());
+        report.error
+    })?;
+
+    info!("Streaming server initialized on {}:{}", tailscale_ip, streaming_server.port());
 
     // Initialize Dolphin emulator manager
     debug!("Initializing Dolphin emulator manager...");
-    // TODO: Initialize Dolphin emulator manager
+    let dolphin_config = DolphinConfig {
+        executable_path: env::var("DOLPHIN_PATH")
+            .unwrap_or_else(|_| "/usr/bin/dolphin-emu".to_string()),
+        rom_directory: env::var("ROM_PATH")
+            .unwrap_or_else(|_| "/srv/games/gc-wii".to_string()),
+        save_directory: env::var("SAVE_PATH")
+            .unwrap_or_else(|_| "/srv/saves".to_string()),
+        window_title: "Dolphin Remote Gaming".to_string(),
+        enable_graphics_mods: true,
+        enable_netplay: false,
+        audio_backend: "pulse".to_string(),
+        video_backend: "OpenGL".to_string(),
+    };
+
+    let mut dolphin_manager = DolphinManager::new(dolphin_config).map_err(|e| {
+        let report = ErrorReport::new(e)
+            .with_context("Failed to initialize Dolphin manager".to_string())
+            .with_correlation_id(session_id.clone());
+        error!("{}", report.format_for_log());
+        report.error
+    })?;
+
+    info!("Dolphin emulator manager initialized");
 
     info!("Server initialization complete");
     info!("Ready to accept client connections");
 
+    // Start the streaming server
+    let server_handle = tokio::spawn(async move {
+        if let Err(e) = streaming_server.run().await {
+            error!("Streaming server error: {}", e);
+        }
+    });
+
     // Setup graceful shutdown
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {
-            info!("Received shutdown signal");
+            info!("Received shutdown signal (Ctrl+C)");
         }
         _ = wait_for_termination() => {
             warn!("Received termination signal");
+        }
+        result = server_handle => {
+            match result {
+                Ok(_) => info!("Streaming server completed"),
+                Err(e) => error!("Streaming server task error: {}", e),
+            }
         }
     }
 
     info!("Shutting down server gracefully...");
 
-    // TODO: Cleanup resources
+    // Cleanup resources in proper order
+    info!("Stopping Dolphin emulator instances...");
+    if let Err(e) = dolphin_manager.shutdown().await {
+        warn!("Error stopping Dolphin manager: {}", e);
+    }
 
+    info!("Disconnecting from Tailscale...");
+    if let Err(e) = vpn.disconnect().await {
+        warn!("Error disconnecting from Tailscale: {}", e);
+    }
+
+    info!("Cleanup complete");
     info!("Server shutdown complete");
     Ok(())
 }

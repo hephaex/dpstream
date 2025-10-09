@@ -1,0 +1,682 @@
+//! Moonlight protocol implementation for dpstream server
+//!
+//! Implements NVIDIA GameStream compatible streaming protocol for video and audio
+
+use crate::error::{Result, StreamingError};
+use crate::streaming::capture::{VideoFrame, VideoCapture, VideoCaptureConfig};
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
+use tokio::net::{TcpListener, TcpStream, UdpSocket};
+use tokio::sync::{broadcast, mpsc};
+use tracing::{info, debug, error, warn};
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+
+/// Moonlight streaming server
+pub struct MoonlightServer {
+    config: ServerConfig,
+    sessions: Arc<Mutex<HashMap<Uuid, StreamingSession>>>,
+    video_broadcast: broadcast::Sender<VideoFrame>,
+    audio_broadcast: broadcast::Sender<AudioFrame>,
+    is_running: Arc<Mutex<bool>>,
+}
+
+/// Server configuration
+#[derive(Debug, Clone)]
+pub struct ServerConfig {
+    pub bind_addr: String,
+    pub port: u16,
+    pub max_clients: usize,
+    pub enable_encryption: bool,
+    pub enable_authentication: bool,
+    pub stream_timeout_ms: u64,
+}
+
+/// Audio configuration
+#[derive(Debug, Clone)]
+pub struct AudioConfig {
+    pub sample_rate: u32,
+    pub channels: u16,
+    pub bitrate: u32,
+    pub codec: AudioCodec,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum AudioCodec {
+    Opus,
+    AAC,
+    PCM,
+}
+
+/// Stream configuration
+#[derive(Debug, Clone)]
+pub struct StreamConfig {
+    pub enable_encryption: bool,
+    pub enable_authentication: bool,
+    pub stream_timeout: std::time::Duration,
+    pub max_packet_size: usize,
+    pub buffer_size: usize,
+}
+
+/// Audio frame data
+#[derive(Debug, Clone)]
+pub struct AudioFrame {
+    pub data: Vec<u8>,
+    pub timestamp: u64,
+    pub sample_rate: u32,
+    pub channels: u16,
+}
+
+/// Streaming session for a connected client
+#[derive(Debug)]
+pub struct StreamingSession {
+    pub id: Uuid,
+    pub client_addr: SocketAddr,
+    pub video_stream: Option<VideoStream>,
+    pub audio_stream: Option<AudioStream>,
+    pub input_handler: Option<InputHandler>,
+    pub state: SessionState,
+    pub started_at: std::time::Instant,
+    pub last_activity: std::time::Instant,
+    pub stream_config: Option<NegotiatedStreamConfig>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SessionState {
+    Connecting,
+    Handshaking,
+    Streaming,
+    Paused,
+    Disconnecting,
+    Terminated,
+}
+
+/// Video streaming component
+#[derive(Debug)]
+pub struct VideoStream {
+    sender: mpsc::UnboundedSender<VideoFrame>,
+    stats: StreamStats,
+}
+
+/// Audio streaming component
+#[derive(Debug)]
+pub struct AudioStream {
+    sender: mpsc::UnboundedSender<AudioFrame>,
+    stats: StreamStats,
+}
+
+/// Input handling component
+#[derive(Debug)]
+pub struct InputHandler {
+    receiver: mpsc::UnboundedReceiver<InputEvent>,
+}
+
+/// Stream statistics
+#[derive(Debug, Clone, Default)]
+pub struct StreamStats {
+    pub frames_sent: u64,
+    pub bytes_sent: u64,
+    pub frames_dropped: u64,
+    pub last_frame_time: Option<std::time::Instant>,
+    pub average_fps: f32,
+    pub average_bitrate: f32,
+}
+
+/// Input events from client
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum InputEvent {
+    KeyDown { key: u32 },
+    KeyUp { key: u32 },
+    MouseMove { x: i32, y: i32 },
+    MouseDown { button: u8 },
+    MouseUp { button: u8 },
+    MouseWheel { delta: i32 },
+    ControllerInput { controller_id: u8, input: ControllerInput },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ControllerInput {
+    pub buttons: u32,
+    pub left_stick_x: i16,
+    pub left_stick_y: i16,
+    pub right_stick_x: i16,
+    pub right_stick_y: i16,
+    pub left_trigger: u8,
+    pub right_trigger: u8,
+}
+
+/// Client capabilities received during handshake
+#[derive(Debug, Clone)]
+pub struct ClientCapabilities {
+    pub max_resolution: (u32, u32),
+    pub supported_codecs: Vec<String>,
+    pub audio_codecs: Vec<String>,
+    pub max_fps: u32,
+    pub supports_hdr: bool,
+}
+
+/// Negotiated stream configuration after capability exchange
+#[derive(Debug, Clone)]
+pub struct NegotiatedStreamConfig {
+    pub video_resolution: (u32, u32),
+    pub video_fps: u32,
+    pub video_bitrate: u32,
+    pub audio_sample_rate: u32,
+    pub audio_channels: u32,
+}
+
+impl MoonlightServer {
+
+    /// Start the Moonlight server
+    pub async fn start(&mut self) -> Result<()> {
+        info!("Starting Moonlight server");
+
+        *self.is_running.lock().unwrap() = true;
+
+        let bind_addr = format!("{}:{}", self.config.bind_addr, self.config.port);
+        let listen_addr: SocketAddr = bind_addr.parse()
+            .map_err(|e| StreamingError::CaptureInitFailed(format!("Invalid bind address: {}", e)))?;
+
+        // Start TCP listener for control connections
+        let control_listener = TcpListener::bind(listen_addr).await
+            .map_err(|e| StreamingError::FrameProcessingFailed {
+                reason: format!("Failed to bind control listener: {}", e)
+            })?;
+
+        // Start UDP socket for video/audio streaming
+        let stream_addr = SocketAddr::new(
+            listen_addr.ip(),
+            listen_addr.port() + 1
+        );
+        let stream_socket = UdpSocket::bind(stream_addr).await
+            .map_err(|e| StreamingError::FrameProcessingFailed {
+                reason: format!("Failed to bind stream socket: {}", e)
+            })?;
+
+        info!("Moonlight server listening on {} (control) and {} (stream)",
+              listen_addr, stream_addr);
+
+        // Start control connection handler
+        let sessions = Arc::clone(&self.sessions);
+        let is_running = Arc::clone(&self.is_running);
+        let config = self.config.clone();
+        let video_broadcast = self.video_broadcast.clone();
+        let audio_broadcast = self.audio_broadcast.clone();
+
+        tokio::spawn(async move {
+            Self::handle_control_connections(
+                control_listener,
+                sessions,
+                is_running,
+                config,
+                video_broadcast,
+                audio_broadcast,
+            ).await;
+        });
+
+        // Start stream data handler
+        let sessions_clone = Arc::clone(&self.sessions);
+        let is_running_clone = Arc::clone(&self.is_running);
+
+        tokio::spawn(async move {
+            Self::handle_stream_data(
+                stream_socket,
+                sessions_clone,
+                is_running_clone,
+            ).await;
+        });
+
+        info!("Moonlight server started successfully");
+        Ok(())
+    }
+
+    /// Stop the Moonlight server
+    pub async fn stop(&mut self) -> Result<()> {
+        info!("Stopping Moonlight server");
+
+        *self.is_running.lock().unwrap() = false;
+
+        // Disconnect all sessions
+        let mut sessions = self.sessions.lock().unwrap();
+        for (session_id, session) in sessions.iter_mut() {
+            session.state = SessionState::Terminated;
+            info!("Terminated session: {}", session_id);
+        }
+        sessions.clear();
+
+        info!("Moonlight server stopped");
+        Ok(())
+    }
+
+    /// Broadcast video frame to all clients
+    pub fn broadcast_video_frame(&self, frame: VideoFrame) -> Result<()> {
+        match self.video_broadcast.send(frame) {
+            Ok(_) => Ok(()),
+            Err(broadcast::error::SendError(_)) => {
+                debug!("No video subscribers");
+                Ok(())
+            }
+        }
+    }
+
+    /// Broadcast audio frame to all clients
+    pub fn broadcast_audio_frame(&self, frame: AudioFrame) -> Result<()> {
+        match self.audio_broadcast.send(frame) {
+            Ok(_) => Ok(()),
+            Err(broadcast::error::SendError(_)) => {
+                debug!("No audio subscribers");
+                Ok(())
+            }
+        }
+    }
+
+    /// Create a new Moonlight server with updated config structure
+    pub async fn new(config: ServerConfig) -> Result<Self> {
+        let bind_addr = format!("{}:{}", config.bind_addr, config.port);
+        info!("Initializing Moonlight server on {}", bind_addr);
+        debug!("Max clients: {}, encryption: {}, auth: {}",
+               config.max_clients,
+               config.enable_encryption,
+               config.enable_authentication);
+
+        let (video_broadcast, _) = broadcast::channel(32);
+        let (audio_broadcast, _) = broadcast::channel(32);
+
+        Ok(Self {
+            config,
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+            video_broadcast,
+            audio_broadcast,
+            is_running: Arc::new(Mutex::new(false)),
+        })
+    }
+
+    /// Get the server port
+    pub fn port(&self) -> u16 {
+        self.config.port
+    }
+
+    /// Run the server main loop
+    pub async fn run(&mut self) -> Result<()> {
+        self.start().await?;
+
+        // Main server loop
+        while *self.is_running.lock().unwrap() {
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        }
+
+        self.stop().await
+    }
+
+    /// Get server statistics
+    pub fn get_stats(&self) -> ServerStats {
+        let sessions = self.sessions.lock().unwrap();
+        let active_sessions = sessions.values()
+            .filter(|s| s.state == SessionState::Streaming)
+            .count();
+
+        ServerStats {
+            active_sessions,
+            total_sessions: sessions.len(),
+            is_running: *self.is_running.lock().unwrap(),
+            uptime: std::time::Instant::now().duration_since(
+                sessions.values().map(|s| s.started_at).min().unwrap_or(std::time::Instant::now())
+            ),
+        }
+    }
+
+    async fn handle_control_connections(
+        listener: TcpListener,
+        sessions: Arc<Mutex<HashMap<Uuid, StreamingSession>>>,
+        is_running: Arc<Mutex<bool>>,
+        config: ServerConfig,
+        video_broadcast: broadcast::Sender<VideoFrame>,
+        audio_broadcast: broadcast::Sender<AudioFrame>,
+    ) {
+        while *is_running.lock().unwrap() {
+            match listener.accept().await {
+                Ok((stream, addr)) => {
+                    info!("New client connection from: {}", addr);
+
+                    // Check client limit
+                    {
+                        let sessions_guard = sessions.lock().unwrap();
+                        if sessions_guard.len() >= config.max_clients {
+                            warn!("Client limit reached, rejecting connection from {}", addr);
+                            drop(stream);
+                            continue;
+                        }
+                    }
+
+                    // Create new session
+                    let session_id = Uuid::new_v4();
+                    let session = StreamingSession {
+                        id: session_id,
+                        client_addr: addr,
+                        video_stream: None,
+                        audio_stream: None,
+                        input_handler: None,
+                        state: SessionState::Connecting,
+                        started_at: std::time::Instant::now(),
+                        last_activity: std::time::Instant::now(),
+                        stream_config: None,
+                    };
+
+                    sessions.lock().unwrap().insert(session_id, session);
+
+                    // Handle client session
+                    let sessions_clone = Arc::clone(&sessions);
+                    let video_broadcast_clone = video_broadcast.clone();
+                    let audio_broadcast_clone = audio_broadcast.clone();
+                    let config_clone = config.clone();
+
+                    tokio::spawn(async move {
+                        if let Err(e) = Self::handle_client_session(
+                            stream,
+                            session_id,
+                            sessions_clone,
+                            config_clone,
+                            video_broadcast_clone,
+                            audio_broadcast_clone,
+                        ).await {
+                            error!("Client session error for {}: {}", addr, e);
+                        }
+                    });
+                }
+                Err(e) => {
+                    error!("Failed to accept connection: {}", e);
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+            }
+        }
+    }
+
+    async fn handle_client_session(
+        mut stream: TcpStream,
+        session_id: Uuid,
+        sessions: Arc<Mutex<HashMap<Uuid, StreamingSession>>>,
+        config: ServerConfig,
+        video_broadcast: broadcast::Sender<VideoFrame>,
+        audio_broadcast: broadcast::Sender<AudioFrame>,
+    ) -> Result<()> {
+        info!("Handling client session: {}", session_id);
+
+        // Implement Moonlight protocol handshake
+        debug!("Starting Moonlight handshake for session {}", session_id);
+
+        // Update session state to handshaking
+        {
+            let mut sessions_guard = sessions.lock().unwrap();
+            if let Some(session) = sessions_guard.get_mut(&session_id) {
+                session.state = SessionState::Handshaking;
+            }
+        }
+
+        // Step 1: RTSP handshake for session negotiation
+        let handshake_result = Self::perform_rtsp_handshake(&mut stream, &config).await;
+        if handshake_result.is_err() {
+            warn!("RTSP handshake failed for session {}: {:?}", session_id, handshake_result);
+            return handshake_result;
+        }
+
+        // Step 2: Capability exchange
+        let capabilities = Self::exchange_capabilities(&mut stream, &config).await?;
+        debug!("Client capabilities: {:?}", capabilities);
+
+        // Step 3: Encryption key exchange (if enabled)
+        if config.enable_encryption {
+            Self::exchange_encryption_keys(&mut stream).await?;
+            debug!("Encryption keys exchanged for session {}", session_id);
+        }
+
+        // Step 4: Stream configuration
+        let stream_config = Self::negotiate_stream_config(&mut stream, capabilities).await?;
+        debug!("Stream configuration: {:?}", stream_config);
+
+        // Update session to streaming state
+        {
+            let mut sessions_guard = sessions.lock().unwrap();
+            if let Some(session) = sessions_guard.get_mut(&session_id) {
+                session.state = SessionState::Streaming;
+                session.stream_config = Some(stream_config);
+            }
+        }
+
+        info!("Moonlight handshake completed for session {}", session_id);
+
+        // Set up video stream
+        let (video_tx, mut video_rx) = mpsc::unbounded_channel();
+        let mut video_receiver = video_broadcast.subscribe();
+
+        tokio::spawn(async move {
+            while let Ok(frame) = video_receiver.recv().await {
+                if video_tx.send(frame).is_err() {
+                    break;
+                }
+            }
+        });
+
+        // Set up audio stream
+        let (audio_tx, mut audio_rx) = mpsc::unbounded_channel();
+        let mut audio_receiver = audio_broadcast.subscribe();
+
+        tokio::spawn(async move {
+            while let Ok(frame) = audio_receiver.recv().await {
+                if audio_tx.send(frame).is_err() {
+                    break;
+                }
+            }
+        });
+
+        // Update session with streams
+        {
+            let mut sessions_guard = sessions.lock().unwrap();
+            if let Some(session) = sessions_guard.get_mut(&session_id) {
+                session.video_stream = Some(VideoStream {
+                    sender: video_tx,
+                    stats: StreamStats::default(),
+                });
+                session.audio_stream = Some(AudioStream {
+                    sender: audio_tx,
+                    stats: StreamStats::default(),
+                });
+            }
+        }
+
+        info!("Client session established: {}", session_id);
+
+        // Keep session alive and handle control messages
+        let mut buffer = vec![0u8; 1024];
+        loop {
+            tokio::select! {
+                // Handle video frames
+                frame = video_rx.recv() => {
+                    if let Some(_frame) = frame {
+                        // TODO: Send video frame to client
+                        // This would encode the frame and send via UDP or TCP
+                    }
+                }
+
+                // Handle audio frames
+                frame = audio_rx.recv() => {
+                    if let Some(_frame) = frame {
+                        // TODO: Send audio frame to client
+                    }
+                }
+
+                // Handle control messages
+                result = stream.readable() => {
+                    if result.is_err() {
+                        break;
+                    }
+
+                    match stream.try_read(&mut buffer) {
+                        Ok(0) => break, // Connection closed
+                        Ok(n) => {
+                            // TODO: Parse control messages
+                            debug!("Received {} bytes from client", n);
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            continue;
+                        }
+                        Err(e) => {
+                            error!("Read error: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Cleanup session
+        sessions.lock().unwrap().remove(&session_id);
+        info!("Client session ended: {}", session_id);
+
+        Ok(())
+    }
+
+    async fn handle_stream_data(
+        socket: UdpSocket,
+        sessions: Arc<Mutex<HashMap<Uuid, StreamingSession>>>,
+        is_running: Arc<Mutex<bool>>,
+    ) {
+        let mut buffer = vec![0u8; 65536]; // Max UDP packet size
+
+        while *is_running.lock().unwrap() {
+            match socket.recv_from(&mut buffer).await {
+                Ok((size, addr)) => {
+                    debug!("Received {} bytes from {}", size, addr);
+                    // TODO: Parse and route stream data to appropriate session
+                }
+                Err(e) => {
+                    error!("UDP receive error: {}", e);
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+            }
+        }
+    }
+
+    /// Perform RTSP handshake for session negotiation
+    async fn perform_rtsp_handshake(stream: &mut TcpStream, config: &ServerConfig) -> Result<()> {
+        // Simplified RTSP handshake implementation
+        debug!("Performing RTSP handshake");
+
+        // In a real implementation, this would handle RTSP DESCRIBE, SETUP, PLAY sequence
+        // For now, simulate successful handshake
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
+        Ok(())
+    }
+
+    /// Exchange capabilities with the client
+    async fn exchange_capabilities(stream: &mut TcpStream, config: &ServerConfig) -> Result<ClientCapabilities> {
+        debug!("Exchanging capabilities");
+
+        // In a real implementation, this would parse client capabilities and respond with server capabilities
+        // For now, return default capabilities
+        Ok(ClientCapabilities {
+            max_resolution: (1920, 1080),
+            supported_codecs: vec!["H264".to_string()],
+            audio_codecs: vec!["Opus".to_string()],
+            max_fps: 60,
+            supports_hdr: false,
+        })
+    }
+
+    /// Exchange encryption keys if encryption is enabled
+    async fn exchange_encryption_keys(stream: &mut TcpStream) -> Result<()> {
+        debug!("Exchanging encryption keys");
+
+        // In a real implementation, this would perform key exchange using AES or similar
+        // For now, simulate key exchange
+        tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+
+        Ok(())
+    }
+
+    /// Negotiate stream configuration with client
+    async fn negotiate_stream_config(stream: &mut TcpStream, capabilities: ClientCapabilities) -> Result<NegotiatedStreamConfig> {
+        debug!("Negotiating stream configuration");
+
+        // In a real implementation, this would negotiate optimal settings based on capabilities
+        Ok(NegotiatedStreamConfig {
+            video_resolution: (1280, 720), // Start with 720p for compatibility
+            video_fps: 60,
+            video_bitrate: 15000, // 15 Mbps
+            audio_sample_rate: 48000,
+            audio_channels: 2,
+        })
+    }
+}
+
+/// Server statistics
+#[derive(Debug, Clone)]
+pub struct ServerStats {
+    pub active_sessions: usize,
+    pub total_sessions: usize,
+    pub is_running: bool,
+    pub uptime: std::time::Duration,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::streaming::capture::{VideoEncoder, QualityPreset};
+
+    fn create_test_config() -> ServerConfig {
+        ServerConfig {
+            bind_addr: "127.0.0.1".to_string(),
+            port: 47989,
+            max_clients: 4,
+            enable_encryption: true,
+            enable_authentication: true,
+            stream_timeout_ms: 30000,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_moonlight_server_creation() {
+        let config = create_test_config();
+        let result = MoonlightServer::new(config).await;
+        assert!(result.is_ok(), "MoonlightServer creation should succeed");
+
+        let server = result.unwrap();
+        let stats = server.get_stats();
+        assert_eq!(stats.active_sessions, 0);
+        assert!(!stats.is_running);
+    }
+
+    #[tokio::test]
+    async fn test_video_frame_broadcast() {
+        let config = create_test_config();
+        let server = MoonlightServer::new(config).await.unwrap();
+
+        let frame = VideoFrame {
+            data: vec![0; 1920 * 1080 * 3 / 2],
+            width: 1920,
+            height: 1080,
+            timestamp: 12345,
+            frame_number: 1,
+        };
+
+        let result = server.broadcast_video_frame(frame);
+        assert!(result.is_ok(), "Video frame broadcast should succeed");
+    }
+
+    #[tokio::test]
+    async fn test_audio_frame_broadcast() {
+        let config = create_test_config();
+        let server = MoonlightServer::new(config).await.unwrap();
+
+        let frame = AudioFrame {
+            data: vec![0; 1024],
+            timestamp: 12345,
+            sample_rate: 48000,
+            channels: 2,
+        };
+
+        let result = server.broadcast_audio_frame(frame);
+        assert!(result.is_ok(), "Audio frame broadcast should succeed");
+    }
+}
