@@ -1,0 +1,43 @@
+[Unit]
+Description=dpstream Remote Gaming Server
+Documentation=https://github.com/hephaex/dpstream
+After=network.target
+
+[Service]
+Type=simple
+User=dpstream
+Group=dpstream
+WorkingDirectory=/opt/dpstream
+ExecStart=/opt/dpstream/dpstream-server
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+KillMode=mixed
+Environment=RUST_LOG=info
+Environment=SERVER_PORT=47989
+Environment=MAX_CLIENTS=8
+Environment=DOLPHIN_PATH=/usr/bin/dolphin-emu
+Environment=ROM_PATH=/opt/dpstream/roms
+Environment=SAVE_PATH=/opt/dpstream/saves
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security settings
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/dpstream/saves
+ReadWritePaths=/opt/dpstream/logs
+ReadWritePaths=/tmp
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RemoveIPC=yes
+
+[Install]
+WantedBy=multi-user.target

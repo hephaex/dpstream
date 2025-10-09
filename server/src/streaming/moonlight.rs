@@ -5,10 +5,15 @@
 use crate::error::{Result, StreamingError};
 use crate::streaming::capture::{VideoFrame, VideoCapture, VideoCaptureConfig};
 use crate::input::{MoonlightInputPacket, ServerInputManager};
+use crate::health::HealthMonitor;
 use dashmap::DashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use parking_lot::RwLock;
+use cache_padded::CachePadded;
+use once_cell::sync::Lazy;
+use ahash::AHashMap;
+use bumpalo::Bump;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use flume::{Sender, Receiver, bounded, unbounded};
 use smallvec::SmallVec;
@@ -23,18 +28,37 @@ pub struct MoonlightServer {
     video_broadcast: Sender<VideoFrame>,
     audio_broadcast: Sender<AudioFrame>,
     input_manager: Arc<RwLock<Option<ServerInputManager>>>,
+    health_monitor: Arc<RwLock<Option<Arc<HealthMonitor>>>>,
     is_running: Arc<parking_lot::Mutex<bool>>,
     performance_monitor: Arc<PerformanceMonitor>,
 }
 
-/// Performance monitoring for optimization
-#[derive(Debug, Default)]
+/// Performance monitoring for optimization with cache-aligned counters
+#[derive(Debug)]
 pub struct PerformanceMonitor {
-    pub frames_processed: std::sync::atomic::AtomicU64,
-    pub avg_frame_time_us: std::sync::atomic::AtomicU64,
-    pub memory_usage_bytes: std::sync::atomic::AtomicU64,
-    pub active_sessions: std::sync::atomic::AtomicUsize,
-    pub network_bytes_sent: std::sync::atomic::AtomicU64,
+    pub frames_processed: CachePadded<std::sync::atomic::AtomicU64>,
+    pub avg_frame_time_us: CachePadded<std::sync::atomic::AtomicU64>,
+    pub memory_usage_bytes: CachePadded<std::sync::atomic::AtomicU64>,
+    pub active_sessions: CachePadded<std::sync::atomic::AtomicUsize>,
+    pub network_bytes_sent: CachePadded<std::sync::atomic::AtomicU64>,
+    pub packet_loss_count: CachePadded<std::sync::atomic::AtomicU64>,
+    pub latency_histogram: CachePadded<std::sync::atomic::AtomicU64>, // Stores compressed histogram
+    pub peak_memory_usage: CachePadded<std::sync::atomic::AtomicU64>,
+}
+
+impl Default for PerformanceMonitor {
+    fn default() -> Self {
+        Self {
+            frames_processed: CachePadded::new(std::sync::atomic::AtomicU64::new(0)),
+            avg_frame_time_us: CachePadded::new(std::sync::atomic::AtomicU64::new(0)),
+            memory_usage_bytes: CachePadded::new(std::sync::atomic::AtomicU64::new(0)),
+            active_sessions: CachePadded::new(std::sync::atomic::AtomicUsize::new(0)),
+            network_bytes_sent: CachePadded::new(std::sync::atomic::AtomicU64::new(0)),
+            packet_loss_count: CachePadded::new(std::sync::atomic::AtomicU64::new(0)),
+            latency_histogram: CachePadded::new(std::sync::atomic::AtomicU64::new(0)),
+            peak_memory_usage: CachePadded::new(std::sync::atomic::AtomicU64::new(0)),
+        }
+    }
 }
 
 /// Server configuration
@@ -298,16 +322,18 @@ impl MoonlightServer {
                config.enable_encryption,
                config.enable_authentication);
 
-        let (video_broadcast, _) = broadcast::channel(32);
-        let (audio_broadcast, _) = broadcast::channel(32);
+        let (video_broadcast, _) = bounded(1024);
+        let (audio_broadcast, _) = bounded(1024);
 
         Ok(Self {
             config,
-            sessions: Arc::new(Mutex::new(HashMap::new())),
+            sessions: Arc::new(DashMap::new()),
             video_broadcast,
             audio_broadcast,
-            input_manager: Arc::new(Mutex::new(None)),
-            is_running: Arc::new(Mutex::new(false)),
+            input_manager: Arc::new(RwLock::new(None)),
+            health_monitor: Arc::new(RwLock::new(None)),
+            is_running: Arc::new(parking_lot::Mutex::new(false)),
+            performance_monitor: Arc::new(PerformanceMonitor::default()),
         })
     }
 
@@ -318,7 +344,12 @@ impl MoonlightServer {
 
     /// Set the input manager for handling client input
     pub fn set_input_manager(&self, input_manager: ServerInputManager) {
-        *self.input_manager.lock().unwrap() = Some(input_manager);
+        *self.input_manager.write() = Some(input_manager);
+    }
+
+    /// Set the health monitor for health endpoints
+    pub fn set_health_monitor(&self, health_monitor: Arc<HealthMonitor>) {
+        *self.health_monitor.write() = Some(health_monitor);
     }
 
     /// Convert ControllerInput to MoonlightInputPacket

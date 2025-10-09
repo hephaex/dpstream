@@ -1,0 +1,98 @@
+# Multi-stage Docker build for dpstream server
+# Optimized for production deployment with minimal attack surface
+
+# Build stage
+FROM rust:1.70-slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    libnvidia-encode-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Copy dependency files first for better caching
+COPY server/Cargo.toml server/Cargo.lock ./
+
+# Create dummy source to build dependencies
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release --features full
+RUN rm -rf src
+
+# Copy source code
+COPY server/src ./src/
+COPY server/benches ./benches/
+COPY server/tests ./tests/
+
+# Build the actual application with full optimization
+RUN cargo build --release --features full --bin dpstream-server
+
+# Runtime stage - minimal Ubuntu with only required dependencies
+FROM ubuntu:24.04
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    libssl3 \
+    libgstreamer1.0-0 \
+    libgstreamer-plugins-base1.0-0 \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    libnvidia-encode-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create non-root user for security
+RUN groupadd -r dpstream && useradd -r -g dpstream dpstream
+
+# Create directories with proper permissions
+RUN mkdir -p /app/logs /app/saves /app/roms /app/config \
+    && chown -R dpstream:dpstream /app
+
+# Copy optimized binary from builder
+COPY --from=builder /app/target/release/dpstream-server /app/
+COPY --from=builder /app/target/release/dpstream-server /usr/local/bin/
+
+# Copy configuration files
+COPY server/config/ /app/config/
+
+# Set environment variables
+ENV RUST_LOG=info
+ENV RUST_BACKTRACE=1
+ENV DOLPHIN_PATH=/usr/bin/dolphin-emu
+ENV ROM_PATH=/app/roms
+ENV SAVE_PATH=/app/saves
+ENV SERVER_PORT=47989
+ENV MAX_CLIENTS=8
+
+# Expose ports
+EXPOSE 47989/tcp
+EXPOSE 47998/udp
+EXPOSE 47999/udp
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:47989/health || exit 1
+
+# Switch to non-root user
+USER dpstream
+
+# Set working directory
+WORKDIR /app
+
+# Default command
+CMD ["dpstream-server"]
+
+# Labels for metadata
+LABEL org.opencontainers.image.title="dpstream Server"
+LABEL org.opencontainers.image.description="Dolphin Remote Gaming Server for Nintendo Switch streaming"
+LABEL org.opencontainers.image.vendor="Mario Cho <hephaex@gmail.com>"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.source="https://github.com/hephaex/dpstream"
+LABEL org.opencontainers.image.licenses="MIT"

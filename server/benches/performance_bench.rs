@@ -2,8 +2,13 @@
 //!
 //! Benchmarks key performance-critical operations
 
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId, black_box};
 use std::time::Duration;
+use std::sync::Arc;
+use dashmap::DashMap;
+use flume::{bounded, unbounded};
+use cache_padded::CachePadded;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 fn bench_memory_allocation(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_allocation");
@@ -178,6 +183,113 @@ fn bench_optimized_data_structures(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark cache-aligned performance optimizations
+fn bench_cache_optimization(c: &mut Criterion) {
+    let mut group = c.benchmark_group("cache_optimization");
+
+    // Benchmark cache-padded vs non-padded atomic operations
+    group.bench_function("atomic_unpadded", |b| {
+        let counter = AtomicU64::new(0);
+        b.iter(|| {
+            for _ in 0..1000 {
+                counter.fetch_add(1, Ordering::Relaxed);
+                black_box(counter.load(Ordering::Relaxed));
+            }
+        });
+    });
+
+    group.bench_function("atomic_cache_padded", |b| {
+        let counter = CachePadded::new(AtomicU64::new(0));
+        b.iter(|| {
+            for _ in 0..1000 {
+                counter.fetch_add(1, Ordering::Relaxed);
+                black_box(counter.load(Ordering::Relaxed));
+            }
+        });
+    });
+
+    group.finish();
+}
+
+/// Benchmark channel performance for different types
+fn bench_channel_performance(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let mut group = c.benchmark_group("channel_performance");
+
+    group.bench_function("flume_bounded", |b| {
+        b.to_async(&rt).iter(|| async {
+            let (tx, rx) = bounded(1000);
+
+            // Producer
+            for i in 0..1000 {
+                tx.send_async(i).await.unwrap();
+            }
+
+            // Consumer
+            for _ in 0..1000 {
+                black_box(rx.recv_async().await.unwrap());
+            }
+        });
+    });
+
+    group.bench_function("flume_unbounded", |b| {
+        b.to_async(&rt).iter(|| async {
+            let (tx, rx) = unbounded();
+
+            // Producer
+            for i in 0..1000 {
+                tx.send_async(i).await.unwrap();
+            }
+
+            // Consumer
+            for _ in 0..1000 {
+                black_box(rx.recv_async().await.unwrap());
+            }
+        });
+    });
+
+    group.finish();
+}
+
+/// Benchmark enterprise-scale concurrent operations
+fn bench_enterprise_concurrency(c: &mut Criterion) {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let mut group = c.benchmark_group("enterprise_concurrency");
+
+    // Simulate high-throughput session management
+    group.bench_function("concurrent_session_management", |b| {
+        b.to_async(&rt).iter(|| async {
+            let sessions = Arc::new(DashMap::new());
+
+            // Simulate concurrent session operations
+            let tasks: Vec<_> = (0..100)
+                .map(|i| {
+                    let sessions = sessions.clone();
+                    tokio::spawn(async move {
+                        // Insert session
+                        sessions.insert(i, format!("session_{}", i));
+
+                        // Read session
+                        black_box(sessions.get(&i));
+
+                        // Update session
+                        sessions.insert(i, format!("updated_session_{}", i));
+
+                        // Remove session
+                        sessions.remove(&i);
+                    })
+                })
+                .collect();
+
+            for task in tasks {
+                task.await.unwrap();
+            }
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_memory_allocation,
@@ -185,6 +297,9 @@ criterion_group!(
     bench_serialization,
     bench_async_operations,
     bench_streaming_performance,
-    bench_optimized_data_structures
+    bench_optimized_data_structures,
+    bench_cache_optimization,
+    bench_channel_performance,
+    bench_enterprise_concurrency
 );
 criterion_main!(benches);

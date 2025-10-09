@@ -12,6 +12,8 @@ use self::audio::{AudioPlayer, AudioFrame};
 use alloc::string::String;
 use alloc::vec::Vec;
 use heapless::Vec as HeaplessVec;
+use cache_padded::CachePadded;
+use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 /// Main Moonlight client
 pub struct MoonlightClient {

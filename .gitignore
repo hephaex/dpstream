@@ -34,5 +34,17 @@ dist/
 releases/
 artifacts/
 
-# Development history and session logs
+# Development history and session logs (contains Claude interaction logs)
 .history/
+
+# Claude Code related files (keep private)
+*claude*
+*Claude*
+.claude/
+claude-*.md
+CLAUDE-*.md
+
+# AI assistant interaction logs and session data
+ai-sessions/
+assistant-logs/
+*.assistant.log

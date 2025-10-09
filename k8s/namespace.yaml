@@ -1,0 +1,9 @@
+# Kubernetes namespace for dpstream deployment
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dpstream
+  labels:
+    app: dpstream
+    version: v1.0.0
+    environment: production

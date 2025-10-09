@@ -28,10 +28,10 @@ nb = "1.1"                    # Non-blocking I/O
 # Performance optimizations for Switch
 cortex-m = "0.7"              # ARM Cortex-M utilities
 atomic-polyfill = "1.0"       # Atomic operations on non-atomic platforms
+cache-padded = "1.2"          # Cache-line optimization for Tegra X1
+once_cell = { version = "1.19", default-features = false, features = ["race"] }
+tinyvec = { version = "1.6", features = ["alloc", "rustc_1_57"] }  # Ultra-small vectors
 critical-section = "1.1"      # Critical sections for interrupts
-cache-padded = "1.3"          # Cache-aligned data structures
-once_cell = { version = "1.19", default-features = false, features = ["race"] }  # Lazy static initialization
-tinyvec = { version = "1.6", default-features = false, features = ["alloc"] }    # Smaller vector alternative
 
 # Nintendo Switch Support (real implementations)
 # Note: These would be uncommented in a real homebrew build environment

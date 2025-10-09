@@ -23,8 +23,16 @@ flume = "0.11"          # Ultra-fast MPSC channels (alternative to tokio channel
 dashmap = "6.0"         # Concurrent hashmap with better performance than Arc<Mutex<HashMap>>
 smallvec = { version = "1.13", features = ["const_new", "union"] }  # Stack-allocated vectors
 
+# Advanced optimizations for enterprise deployment
+cache-padded = "1.2"    # Cache-line aligned data structures
+once_cell = "1.19"      # Lazy static initialization with better performance
+arrayvec = "0.7"        # Stack-allocated arrays for known-size collections
+ahash = "0.8"           # Faster hash algorithm than default
+bumpalo = "3.14"        # Arena allocator for temporary allocations
+mimalloc = { version = "0.1", default-features = false }  # High-performance allocator
+
 # Network & Protocols - minimal feature sets
-hyper = { version = "1.5", features = ["client", "http1"] }
+hyper = { version = "1.5", features = ["client", "server", "http1"] }
 tungstenite = { version = "0.24", default-features = false, features = ["rustls-tls-webpki-roots"] }
 mdns-sd = { version = "0.11", optional = true }  # Service discovery
 uuid = { version = "1.0", features = ["v4", "fast-rng"] }

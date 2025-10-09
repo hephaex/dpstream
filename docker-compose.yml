@@ -1,0 +1,239 @@
+# Docker Compose configuration for dpstream development and production
+version: '3.8'
+
+services:
+  # Main dpstream server
+  dpstream-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: dpstream/server:latest
+    container_name: dpstream-server
+    restart: unless-stopped
+
+    # Environment configuration
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - SERVER_PORT=${SERVER_PORT:-47989}
+      - MAX_CLIENTS=${MAX_CLIENTS:-8}
+      - TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY}
+      - TAILSCALE_HOSTNAME=${TAILSCALE_HOSTNAME:-dpstream-server}
+      - DOLPHIN_PATH=/usr/bin/dolphin-emu
+      - ROM_PATH=/app/roms
+      - SAVE_PATH=/app/saves
+
+    # Port mapping
+    ports:
+      - "47989:47989/tcp"   # Moonlight control
+      - "47998:47998/udp"   # Video stream
+      - "47999:47999/udp"   # Audio stream
+      - "8080:8080/tcp"     # Monitoring dashboard
+
+    # Volume mounts
+    volumes:
+      - ./roms:/app/roms:ro          # Game ROMs (read-only)
+      - dpstream-saves:/app/saves     # Save files (persistent)
+      - dpstream-logs:/app/logs       # Application logs
+      - dpstream-config:/app/config   # Configuration files
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw  # X11 for Dolphin display
+
+    # Network configuration
+    networks:
+      - dpstream-network
+
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '4.0'
+        reservations:
+          memory: 2G
+          cpus: '2.0'
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:47989/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:size=1G,noexec,nosuid,nodev
+
+    # Dependencies
+    depends_on:
+      - monitoring
+      - redis
+
+  # Redis for session management and caching
+  redis:
+    image: redis:7-alpine
+    container_name: dpstream-redis
+    restart: unless-stopped
+
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+    volumes:
+      - dpstream-redis:/data
+
+    networks:
+      - dpstream-network
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dpstream-prometheus
+    restart: unless-stopped
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+    ports:
+      - "9090:9090"
+
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - dpstream-prometheus:/prometheus
+
+    networks:
+      - dpstream-network
+
+  # Grafana for monitoring dashboard
+  monitoring:
+    image: grafana/grafana:latest
+    container_name: dpstream-grafana
+    restart: unless-stopped
+
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+
+    ports:
+      - "3000:3000"
+
+    volumes:
+      - dpstream-grafana:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+    networks:
+      - dpstream-network
+
+    depends_on:
+      - prometheus
+
+  # Node Exporter for system metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: dpstream-node-exporter
+    restart: unless-stopped
+
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+
+    ports:
+      - "9100:9100"
+
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+    networks:
+      - dpstream-network
+
+  # Nginx reverse proxy for load balancing (optional for multi-instance)
+  nginx:
+    image: nginx:alpine
+    container_name: dpstream-nginx
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - dpstream-logs:/var/log/nginx
+
+    networks:
+      - dpstream-network
+
+    depends_on:
+      - dpstream-server
+
+    profiles:
+      - production  # Only enabled in production profile
+
+# Networks
+networks:
+  dpstream-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Persistent volumes
+volumes:
+  dpstream-saves:
+    driver: local
+  dpstream-logs:
+    driver: local
+  dpstream-config:
+    driver: local
+  dpstream-redis:
+    driver: local
+  dpstream-prometheus:
+    driver: local
+  dpstream-grafana:
+    driver: local
+
+# Development override
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+---
+# docker-compose.dev.yml (development overrides)
+version: '3.8'
+
+services:
+  dpstream-server:
+    build:
+      target: builder
+    environment:
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=full
+    volumes:
+      - .:/app/source:ro  # Mount source for development
+    ports:
+      - "47989:47989"
+      - "8080:8080"
+    profiles:
+      - dev
+
+# Production override
+# Usage: docker-compose --profile production up
+---
+# Production-specific configurations are included in main compose file with profiles

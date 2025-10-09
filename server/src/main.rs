@@ -7,12 +7,15 @@ mod streaming;
 mod network;
 mod error;
 mod input;
+mod health;
 
 use error::{Result, DpstreamError, ErrorReport};
 use network::VpnManager;
-use streaming::{MoonlightServer, ServerConfig};
+use streaming::{MoonlightServer, ServerConfig, HealthServer};
 use emulator::{DolphinManager, DolphinConfig};
 use input::ServerInputManager;
+use health::{HealthMonitor, run_health_monitoring};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -119,8 +122,32 @@ async fn main() -> Result<()> {
 
     info!("Input manager initialized");
 
+    // Initialize health monitoring
+    debug!("Initializing health monitor...");
+    let health_monitor = Arc::new(HealthMonitor::new("1.0.0".to_string()));
+
+    // Start health monitoring background task
+    let health_monitor_clone = health_monitor.clone();
+    tokio::spawn(async move {
+        run_health_monitoring(health_monitor_clone).await;
+    });
+
+    info!("Health monitoring initialized");
+
+    // Start health server
+    debug!("Starting health check server...");
+    let health_server = HealthServer::new(health_monitor.clone(), 8080);
+    tokio::spawn(async move {
+        if let Err(e) = health_server.run().await {
+            error!("Health server error: {}", e);
+        }
+    });
+
+    info!("Health server started on port 8080");
+
     // Connect input manager to streaming server
     streaming_server.set_input_manager(input_manager);
+    streaming_server.set_health_monitor(health_monitor);
 
     info!("Server initialization complete");
     info!("Ready to accept client connections");

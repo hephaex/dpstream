@@ -1,0 +1,154 @@
+# Prometheus alerting rules for dpstream monitoring
+groups:
+  - name: dpstream.rules
+    rules:
+      # High latency alert
+      - alert: DpstreamHighLatency
+        expr: histogram_quantile(0.95, rate(dpstream_latency_histogram_bucket[5m])) > 50
+        for: 2m
+        labels:
+          severity: warning
+          service: dpstream
+          component: streaming
+        annotations:
+          summary: "dpstream streaming latency is high"
+          description: "95th percentile latency is {{ $value }}ms, which is above the 50ms threshold for more than 2 minutes."
+          runbook_url: "https://docs.dpstream.com/runbooks/high-latency"
+
+      # Server down alert
+      - alert: DpstreamServerDown
+        expr: up{job="dpstream-server"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: dpstream
+          component: server
+        annotations:
+          summary: "dpstream server is down"
+          description: "The dpstream server has been down for more than 30 seconds."
+          runbook_url: "https://docs.dpstream.com/runbooks/server-down"
+
+      # High CPU usage alert
+      - alert: DpstreamHighCPU
+        expr: rate(process_cpu_seconds_total{job="dpstream-server"}[5m]) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: dpstream
+          component: server
+        annotations:
+          summary: "dpstream server CPU usage is high"
+          description: "CPU usage is {{ $value }}% for more than 5 minutes."
+          runbook_url: "https://docs.dpstream.com/runbooks/high-cpu"
+
+      # High memory usage alert
+      - alert: DpstreamHighMemory
+        expr: process_resident_memory_bytes{job="dpstream-server"} / (1024*1024*1024) > 3
+        for: 5m
+        labels:
+          severity: warning
+          service: dpstream
+          component: server
+        annotations:
+          summary: "dpstream server memory usage is high"
+          description: "Memory usage is {{ $value }}GB for more than 5 minutes."
+          runbook_url: "https://docs.dpstream.com/runbooks/high-memory"
+
+      # High packet loss alert
+      - alert: DpstreamHighPacketLoss
+        expr: rate(dpstream_packets_lost_total[5m]) > 0.01
+        for: 1m
+        labels:
+          severity: warning
+          service: dpstream
+          component: network
+        annotations:
+          summary: "dpstream packet loss is high"
+          description: "Packet loss rate is {{ $value }} packets/second for more than 1 minute."
+          runbook_url: "https://docs.dpstream.com/runbooks/packet-loss"
+
+      # High frame drop rate alert
+      - alert: DpstreamHighFrameDrops
+        expr: rate(dpstream_frame_drops_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          service: dpstream
+          component: streaming
+        annotations:
+          summary: "dpstream frame drop rate is high"
+          description: "Frame drop rate is {{ $value }} frames/second for more than 2 minutes."
+          runbook_url: "https://docs.dpstream.com/runbooks/frame-drops"
+
+      # Too many concurrent sessions
+      - alert: DpstreamTooManySessions
+        expr: dpstream_connected_clients > 6
+        for: 1m
+        labels:
+          severity: warning
+          service: dpstream
+          component: server
+        annotations:
+          summary: "dpstream has too many concurrent sessions"
+          description: "Number of connected clients is {{ $value }}, approaching the limit of 8."
+          runbook_url: "https://docs.dpstream.com/runbooks/concurrent-sessions"
+
+      # Low disk space alert
+      - alert: DpstreamLowDiskSpace
+        expr: node_filesystem_avail_bytes{mountpoint="/app"} / node_filesystem_size_bytes{mountpoint="/app"} < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: dpstream
+          component: storage
+        annotations:
+          summary: "dpstream server disk space is low"
+          description: "Available disk space is {{ $value | humanizePercentage }} on /app mountpoint."
+          runbook_url: "https://docs.dpstream.com/runbooks/low-disk-space"
+
+      # Network bandwidth saturation
+      - alert: DpstreamNetworkSaturation
+        expr: rate(dpstream_video_bytes_total[5m]) + rate(dpstream_audio_bytes_total[5m]) > 100000000  # 100 Mbps
+        for: 3m
+        labels:
+          severity: warning
+          service: dpstream
+          component: network
+        annotations:
+          summary: "dpstream network bandwidth is approaching saturation"
+          description: "Total streaming bandwidth is {{ $value | humanize }}bps for more than 3 minutes."
+          runbook_url: "https://docs.dpstream.com/runbooks/network-saturation"
+
+      # Redis connection failure
+      - alert: DpstreamRedisDown
+        expr: up{job="redis"} == 0
+        for: 30s
+        labels:
+          severity: critical
+          service: dpstream
+          component: cache
+        annotations:
+          summary: "dpstream Redis cache is down"
+          description: "Redis cache has been unreachable for more than 30 seconds."
+          runbook_url: "https://docs.dpstream.com/runbooks/redis-down"
+
+  - name: dpstream.recording
+    rules:
+      # Recording rules for efficient queries
+      - record: dpstream:latency_95th_percentile
+        expr: histogram_quantile(0.95, rate(dpstream_latency_histogram_bucket[5m]))
+
+      - record: dpstream:cpu_usage_percent
+        expr: rate(process_cpu_seconds_total{job="dpstream-server"}[5m]) * 100
+
+      - record: dpstream:memory_usage_gb
+        expr: process_resident_memory_bytes{job="dpstream-server"} / (1024*1024*1024)
+
+      - record: dpstream:total_bandwidth_bps
+        expr: rate(dpstream_video_bytes_total[5m]) + rate(dpstream_audio_bytes_total[5m])
+
+      - record: dpstream:packet_loss_rate
+        expr: rate(dpstream_packets_lost_total[5m])
+
+      - record: dpstream:frame_drop_rate
+        expr: rate(dpstream_frame_drops_total[5m])
