@@ -33,11 +33,7 @@ unsafe impl Sync for ZeroCopyVideoBuffer {}
 
 impl ZeroCopyVideoBuffer {
     /// Create a new zero-copy buffer with specified capacity
-    pub fn new(
-        capacity: usize,
-        buffer_id: u64,
-        pool_id: u32,
-    ) -> Result<Self, PoolError> {
+    pub fn new(capacity: usize, buffer_id: u64, pool_id: u32) -> Result<Self, PoolError> {
         // Allocate aligned memory for optimal cache performance
         let layout = std::alloc::Layout::from_size_align(capacity, 64)
             .map_err(|_| PoolError::AllocationFailed)?;

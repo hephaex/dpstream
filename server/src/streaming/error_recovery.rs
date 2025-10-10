@@ -659,7 +659,7 @@ impl ErrorRecoverySystem {
         let mut applicable: Vec<Arc<dyn RecoveryStrategy + Send + Sync>> = strategies
             .values()
             .filter(|strategy| strategy.can_handle(error_type))
-            .map(|strategy| Arc::clone(strategy))  // Clone the Arc (cheap refcount increment)
+            .map(|strategy| Arc::clone(strategy)) // Clone the Arc (cheap refcount increment)
             .collect();
 
         // Sort by priority (highest first)

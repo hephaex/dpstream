@@ -423,7 +423,8 @@ impl MoonlightServer {
     /// Get server statistics
     pub fn get_stats(&self) -> ServerStats {
         // DashMap doesn't need lock(), we can iterate directly
-        let active_sessions = self.sessions
+        let active_sessions = self
+            .sessions
             .iter()
             .filter(|entry| entry.value().state == SessionState::Streaming)
             .count();
@@ -431,7 +432,7 @@ impl MoonlightServer {
         ServerStats {
             active_sessions,
             total_sessions: self.sessions.len(),
-            is_running: *self.is_running.lock(),  // parking_lot doesn't need unwrap
+            is_running: *self.is_running.lock(), // parking_lot doesn't need unwrap
             uptime: std::time::Instant::now().duration_since(
                 self.sessions
                     .iter()
