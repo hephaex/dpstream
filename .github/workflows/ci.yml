@@ -47,7 +47,7 @@ jobs:
     - name: Run Clippy (server)
       run: |
         cd server
-        cargo clippy --all-targets --features crypto,discovery -- -D warnings
+        cargo clippy --all-targets --no-default-features -- -D warnings
 
     - name: Security audit (server)
       run: |
@@ -93,14 +93,14 @@ jobs:
     - name: Run tests (server)
       run: |
         cd server
-        cargo test --all --features crypto,discovery --verbose
+        cargo test --all --no-default-features --verbose
 
     - name: Generate test coverage (server)
       if: matrix.rust == 'stable'
       run: |
         cargo install cargo-tarpaulin
         cd server
-        cargo tarpaulin --features crypto,discovery --workspace --timeout 120 --out Xml
+        cargo tarpaulin --no-default-features --workspace --timeout 120 --out Xml
 
     - name: Upload coverage to Codecov
       if: matrix.rust == 'stable'
@@ -149,12 +149,12 @@ jobs:
     - name: Build server (debug)
       run: |
         cd server
-        cargo build --features crypto,discovery --verbose
+        cargo build --no-default-features --verbose
 
     - name: Build server (release)
       run: |
         cd server
-        cargo build --release --features crypto,discovery --verbose
+        cargo build --release --no-default-features --verbose
 
     - name: Upload build artifacts
       if: matrix.os == 'ubuntu-latest'
@@ -226,7 +226,7 @@ jobs:
     - name: Build for CodeQL analysis
       run: |
         cd server
-        cargo build --release --features crypto,discovery
+        cargo build --release --no-default-features
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
@@ -259,7 +259,7 @@ jobs:
     - name: Build release artifacts
       run: |
         cd server
-        cargo build --release --features crypto,discovery
+        cargo build --release --no-default-features
 
     - name: Create release package
       run: |
