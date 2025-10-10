@@ -172,13 +172,13 @@ impl ErrorReport {
         };
 
         let correlation_str = if let Some(ref id) = self.correlation_id {
-            format!(" | Correlation: {}", id)
+            format!(" | Correlation: {id}")
         } else {
             String::new()
         };
 
         let component_str = if let Some(ref comp) = self.component {
-            format!(" | Component: {}", comp)
+            format!(" | Component: {comp}")
         } else {
             String::new()
         };
@@ -417,7 +417,7 @@ where
         self.map_err(|e| {
             let base_error = e.into();
             let context = f();
-            DpstreamError::Internal(format!("{}: {}", context, base_error))
+            DpstreamError::Internal(format!("{context}: {base_error}"))
         })
     }
 }
@@ -508,7 +508,7 @@ impl DpstreamError {
             DpstreamError::ServiceUnavailable { .. } => {
                 "Service temporarily unavailable. Please try again later.".to_string()
             }
-            _ => format!("An error occurred: {}", self),
+            _ => format!("An error occurred: {self}"),
         }
     }
 }

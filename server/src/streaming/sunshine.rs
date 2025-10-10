@@ -76,8 +76,7 @@ impl DolphinStreamHost {
         // Validate client capabilities
         if !self.validate_client_capabilities(&client_info.capabilities) {
             return Err(anyhow::anyhow!(
-                "Client {} does not support required capabilities",
-                client_id
+                "Client {client_id} does not support required capabilities"
             ));
         }
 
@@ -268,7 +267,7 @@ impl DolphinStreamHost {
             "launch" => self.handle_launch_request(params).await,
             "resume" => self.handle_resume_request(params).await,
             "quit" => self.handle_quit_request().await,
-            _ => Err(anyhow::anyhow!("Unknown request type: {}", request_type)),
+            _ => Err(anyhow::anyhow!("Unknown request type: {request_type}")),
         }
     }
 

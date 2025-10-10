@@ -22,6 +22,7 @@ pub struct DolphinInputAdapter {
 
 /// Connection health monitoring
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ConnectionHealth {
     commands_sent: u64,
     commands_failed: u64,
@@ -62,7 +63,7 @@ impl DolphinInputAdapter {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| EmulatorError::StartupFailed {
-                reason: format!("Failed to start Dolphin with pipe input: {}", e),
+                reason: format!("Failed to start Dolphin with pipe input: {e}"),
             })?;
 
         // Set up command channel
@@ -120,7 +121,7 @@ impl DolphinInputAdapter {
         self.connected_controllers.insert(player_slot, connection);
 
         // Send connection command to Dolphin
-        let command = format!("SET CONTROLLER {} STANDARD", player_slot);
+        let command = format!("SET CONTROLLER {player_slot} STANDARD");
         self.send_command(command)?;
 
         info!("Connected controller for player {}", player_slot);
@@ -130,7 +131,7 @@ impl DolphinInputAdapter {
     /// Disconnect controller from player slot
     pub fn disconnect_controller(&mut self, player_slot: u8) -> Result<()> {
         if self.connected_controllers.remove(&player_slot).is_some() {
-            let command = format!("SET CONTROLLER {} NONE", player_slot);
+            let command = format!("SET CONTROLLER {player_slot} NONE");
             self.send_command(command)?;
             info!("Disconnected controller for player {}", player_slot);
         }
@@ -207,7 +208,7 @@ impl DolphinInputAdapter {
         };
 
         let state = if pressed { "PRESS" } else { "RELEASE" };
-        format!("BUTTON {} {} {}", player, button_name, state)
+        format!("BUTTON {player} {button_name} {state}")
     }
 
     fn format_analog_command(&self, player: u8, stick: AnalogStick, x: f32, y: f32) -> String {
@@ -220,7 +221,7 @@ impl DolphinInputAdapter {
         let x_val = ((x + 1.0) * 127.5) as u8;
         let y_val = ((y + 1.0) * 127.5) as u8;
 
-        format!("ANALOG {} {} {} {}", player, stick_name, x_val, y_val)
+        format!("ANALOG {player} {stick_name} {x_val} {y_val}")
     }
 
     fn format_trigger_command(&self, player: u8, left: f32, right: f32) -> String {
@@ -228,7 +229,7 @@ impl DolphinInputAdapter {
         let left_val = (left * 255.0) as u8;
         let right_val = (right * 255.0) as u8;
 
-        format!("TRIGGER {} {} {}", player, left_val, right_val)
+        format!("TRIGGER {player} {left_val} {right_val}")
     }
 
     fn format_dpad_command(
@@ -253,7 +254,7 @@ impl DolphinInputAdapter {
             dpad_val |= 8;
         }
 
-        format!("DPAD {} {}", player, dpad_val)
+        format!("DPAD {player} {dpad_val}")
     }
 
     fn format_pointer_command(&self, player: u8, x: f32, y: f32, z: f32) -> String {
@@ -355,6 +356,7 @@ impl DolphinInputAdapter {
 
 /// Controller connection information
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ControllerConnection {
     player_slot: u8,
     is_connected: bool,
@@ -363,6 +365,7 @@ struct ControllerConnection {
 
 /// Types of controllers Dolphin supports
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 enum DolphinControllerType {
     None,
     Standard,          // Standard GameCube controller

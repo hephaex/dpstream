@@ -92,7 +92,7 @@ impl DolphinManager {
             .kill_on_drop(true);
 
         let child = cmd.spawn().map_err(|e| EmulatorError::StartupFailed {
-            reason: format!("Failed to spawn Dolphin process: {}", e),
+            reason: format!("Failed to spawn Dolphin process: {e}"),
         })?;
 
         let pid = child.id();

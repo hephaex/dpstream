@@ -108,6 +108,7 @@ impl Drop for ZeroCopyVideoBuffer {
 }
 
 /// High-performance video buffer pool with intelligent allocation strategies
+#[allow(dead_code)]
 pub struct VideoBufferPool {
     /// Pre-allocated buffers for different resolutions
     pools: RwLock<SmallVec<[BufferPoolTier; 4]>>,
@@ -122,6 +123,7 @@ pub struct VideoBufferPool {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct BufferPoolTier {
     /// Buffers in this tier
     buffers: Vec<Arc<ZeroCopyVideoBuffer>>,

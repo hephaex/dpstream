@@ -1,5 +1,5 @@
 // mDNS/UPnP service discovery using modern service discovery protocols
-use crate::error::Result;
+use crate::error::{NetworkError, Result};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{debug, info, warn};
@@ -83,7 +83,7 @@ impl DiscoveryService {
         use mdns_sd::{ServiceDaemon, ServiceInfo};
 
         let daemon = ServiceDaemon::new()
-            .map_err(|e| NetworkError::Discovery(format!("Failed to create mDNS daemon: {}", e)))?;
+            .map_err(|e| NetworkError::Discovery(format!("Failed to create mDNS daemon: {e}")))?;
 
         let service_type = "_nvstream._tcp.local.";
         let instance_name = format!("{}._nvstream._tcp.local.", self.server_info.hostname);
@@ -105,13 +105,13 @@ impl DiscoveryService {
             &self.server_info.hostname,
             &self.server_info.ip,
             self.server_info.port,
-            &properties,
+            &properties[..],
         )
-        .map_err(|e| NetworkError::Discovery(format!("Failed to create service info: {}", e)))?;
+        .map_err(|e| NetworkError::Discovery(format!("Failed to create service info: {e}")))?;
 
         daemon
             .register(service_info)
-            .map_err(|e| NetworkError::Discovery(format!("Failed to register service: {}", e)))?;
+            .map_err(|e| NetworkError::Discovery(format!("Failed to register service: {e}")))?;
 
         self.mdns_daemon = Some(daemon);
         info!("mDNS service registered: {}", instance_name);
@@ -199,12 +199,12 @@ impl DiscoveryService {
         use tokio::time::timeout as async_timeout;
 
         let daemon = ServiceDaemon::new().map_err(|e| {
-            NetworkError::Discovery(format!("Failed to create discovery daemon: {}", e))
+            NetworkError::Discovery(format!("Failed to create discovery daemon: {e}"))
         })?;
 
         let service_type = "_nvstream._tcp.local.";
         let receiver = daemon.browse(service_type).map_err(|e| {
-            NetworkError::Discovery(format!("Failed to start service browsing: {}", e))
+            NetworkError::Discovery(format!("Failed to start service browsing: {e}"))
         })?;
 
         let mut servers = HashMap::new(); // Use HashMap to deduplicate
@@ -226,8 +226,8 @@ impl DiscoveryService {
                         let properties = service.get_properties();
                         let hostname = properties
                             .get("hostname")
-                            .unwrap_or(&service.get_hostname().to_string())
-                            .clone();
+                            .map(|p| p.val_str().to_string())
+                            .unwrap_or_else(|| service.get_hostname().to_string());
 
                         // Get all IP addresses and prefer IPv4
                         let addresses: Vec<_> = service.get_addresses().iter().collect();
@@ -244,12 +244,13 @@ impl DiscoveryService {
                             port: service.get_port(),
                             version: properties
                                 .get("version")
-                                .unwrap_or(&"unknown".to_string())
-                                .clone(),
+                                .map(|p| p.val_str().to_string())
+                                .unwrap_or_else(|| "unknown".to_string()),
                             capabilities: properties
                                 .get("capabilities")
                                 .map(|caps| {
-                                    caps.split(',')
+                                    caps.val_str()
+                                        .split(',')
                                         .map(|s| s.trim().to_string())
                                         .filter(|s| !s.is_empty())
                                         .collect()

@@ -93,6 +93,6 @@ impl PairingManager {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        format!("session_{}", timestamp)
+        format!("session_{timestamp}")
     }
 }

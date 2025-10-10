@@ -226,7 +226,7 @@ pub struct GameProfile {
 impl GameProfile {
     /// Load profile for a specific game
     pub fn load_for_game(game_id: &str) -> Result<Self> {
-        let profile_path = format!("profiles/{}.json", game_id);
+        let profile_path = format!("profiles/{game_id}.json");
 
         if Path::new(&profile_path).exists() {
             Self::load_from_file(profile_path)

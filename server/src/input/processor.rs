@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use tracing::{debug, warn};
 
 /// Input processor that handles transformation and buffering
+#[allow(dead_code)]
 pub struct InputProcessor {
     command_buffer: VecDeque<DolphinCommand>,
     stats: ProcessorStats,
@@ -200,7 +201,7 @@ impl InputProcessor {
     fn convert_analog_inputs(
         &self,
         player_slot: u8,
-        mapping: &ControllerMapping,
+        _mapping: &ControllerMapping,
         input: &MoonlightInputPacket,
     ) -> Result<Vec<DolphinCommand>> {
         let mut commands = Vec::new();
@@ -233,7 +234,7 @@ impl InputProcessor {
     fn convert_triggers(
         &self,
         player_slot: u8,
-        mapping: &ControllerMapping,
+        _mapping: &ControllerMapping,
         input: &MoonlightInputPacket,
     ) -> Result<Vec<DolphinCommand>> {
         let mut commands = Vec::new();

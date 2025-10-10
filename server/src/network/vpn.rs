@@ -121,7 +121,7 @@ impl VpnManager {
         .await
         .map_err(|_| VpnError::TailscaleNotAvailable("Command timeout".to_string()))?
         .map_err(|e| {
-            VpnError::TailscaleNotAvailable(format!("Failed to run tailscale command: {}", e))
+            VpnError::TailscaleNotAvailable(format!("Failed to run tailscale command: {e}"))
         })?;
 
         if !output.status.success() {
@@ -145,7 +145,7 @@ impl VpnManager {
             .output()
             .await
             .map_err(|e| {
-                VpnError::TailscaleNotAvailable(format!("Failed to start tailscaled: {}", e))
+                VpnError::TailscaleNotAvailable(format!("Failed to start tailscaled: {e}"))
             })?;
 
         if !output.status.success() {
@@ -172,11 +172,11 @@ impl VpnManager {
         })
         .await
         .map_err(|_| VpnError::AuthFailed("Authentication timeout".to_string()))?
-        .map_err(|e| VpnError::AuthFailed(format!("Failed to authenticate: {}", e)))?;
+        .map_err(|e| VpnError::AuthFailed(format!("Failed to authenticate: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(VpnError::AuthFailed(format!("Authentication failed: {}", stderr)).into());
+            return Err(VpnError::AuthFailed(format!("Authentication failed: {stderr}")).into());
         }
 
         info!("Successfully authenticated with Tailscale");
@@ -191,7 +191,7 @@ impl VpnManager {
             .args(["set", "--hostname", &self.config.hostname])
             .output()
             .await
-            .map_err(|e| VpnError::Config(format!("Failed to set hostname: {}", e)))?;
+            .map_err(|e| VpnError::Config(format!("Failed to set hostname: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -205,7 +205,7 @@ impl VpnManager {
                 .args(["set", "--advertise-routes", &routes])
                 .output()
                 .await
-                .map_err(|e| VpnError::Config(format!("Failed to advertise routes: {}", e)))?;
+                .map_err(|e| VpnError::Config(format!("Failed to advertise routes: {e}")))?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -221,7 +221,7 @@ impl VpnManager {
                 .args(["set", "--accept-dns"])
                 .output()
                 .await
-                .map_err(|e| VpnError::Config(format!("Failed to configure DNS: {}", e)))?;
+                .map_err(|e| VpnError::Config(format!("Failed to configure DNS: {e}")))?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -271,13 +271,12 @@ impl VpnManager {
         })
         .await
         .map_err(|_| VpnError::Timeout)?
-        .map_err(|e| VpnError::TailscaleNotAvailable(format!("Failed to get status: {}", e)))?;
+        .map_err(|e| VpnError::TailscaleNotAvailable(format!("Failed to get status: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(VpnError::TailscaleNotAvailable(format!(
-                "Status command failed: {}",
-                stderr
+                "Status command failed: {stderr}"
             ))
             .into());
         }
@@ -297,7 +296,7 @@ impl VpnManager {
         use serde_json::Value;
 
         let json: Value = serde_json::from_str(json_str)
-            .map_err(|e| VpnError::Config(format!("Failed to parse status JSON: {}", e)))?;
+            .map_err(|e| VpnError::Config(format!("Failed to parse status JSON: {e}")))?;
 
         let backend_state = json["BackendState"]
             .as_str()
@@ -343,12 +342,12 @@ impl VpnManager {
             .arg("down")
             .output()
             .await
-            .map_err(|e| VpnError::TailscaleNotAvailable(format!("Failed to disconnect: {}", e)))?;
+            .map_err(|e| VpnError::TailscaleNotAvailable(format!("Failed to disconnect: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(
-                VpnError::TailscaleNotAvailable(format!("Disconnect failed: {}", stderr)).into(),
+                VpnError::TailscaleNotAvailable(format!("Disconnect failed: {stderr}")).into(),
             );
         }
 
@@ -396,7 +395,7 @@ impl VpnManager {
         })
         .await
         .map_err(|_| VpnError::Timeout)?
-        .map_err(|e| VpnError::NetworkUnreachable(format!("Failed to ping peer: {}", e)))?;
+        .map_err(|e| VpnError::NetworkUnreachable(format!("Failed to ping peer: {e}")))?;
 
         let success = output.status.success();
         if success {

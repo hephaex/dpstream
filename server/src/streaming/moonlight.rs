@@ -20,6 +20,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Moonlight streaming server with optimized concurrent access
+#[allow(dead_code)]
 pub struct MoonlightServer {
     config: ServerConfig,
     sessions: Arc<DashMap<Uuid, StreamingSession>>,
@@ -141,6 +142,7 @@ pub enum SessionState {
 
 /// Optimized video streaming component with bounded channels
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct VideoStream {
     sender: Sender<VideoFrame>,
     stats: StreamStats,
@@ -149,6 +151,7 @@ pub struct VideoStream {
 
 /// Optimized audio streaming component with bounded channels
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct AudioStream {
     sender: Sender<AudioFrame>,
     stats: StreamStats,
@@ -157,6 +160,7 @@ pub struct AudioStream {
 
 /// High-performance input handling component
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct InputHandler {
     sender: Sender<MoonlightInputPacket>,
     input_buffer: SmallVec<[MoonlightInputPacket; 16]>, // Stack-allocated input buffer
@@ -240,14 +244,14 @@ impl MoonlightServer {
         *self.is_running.lock() = true;
 
         let bind_addr = format!("{}:{}", self.config.bind_addr, self.config.port);
-        let listen_addr: SocketAddr = bind_addr.parse().map_err(|e| {
-            StreamingError::CaptureInitFailed(format!("Invalid bind address: {}", e))
-        })?;
+        let listen_addr: SocketAddr = bind_addr
+            .parse()
+            .map_err(|e| StreamingError::CaptureInitFailed(format!("Invalid bind address: {e}")))?;
 
         // Start TCP listener for control connections
         let control_listener = TcpListener::bind(listen_addr).await.map_err(|e| {
             StreamingError::FrameProcessingFailed {
-                reason: format!("Failed to bind control listener: {}", e),
+                reason: format!("Failed to bind control listener: {e}"),
             }
         })?;
 
@@ -255,7 +259,7 @@ impl MoonlightServer {
         let stream_addr = SocketAddr::new(listen_addr.ip(), listen_addr.port() + 1);
         let stream_socket = UdpSocket::bind(stream_addr).await.map_err(|e| {
             StreamingError::FrameProcessingFailed {
-                reason: format!("Failed to bind stream socket: {}", e),
+                reason: format!("Failed to bind stream socket: {e}"),
             }
         })?;
 
@@ -375,6 +379,7 @@ impl MoonlightServer {
     }
 
     /// Convert ControllerInput to MoonlightInputPacket
+    #[allow(dead_code)]
     fn convert_controller_input_to_moonlight(
         &self,
         _controller_id: u8,
@@ -692,6 +697,7 @@ impl MoonlightServer {
     }
 
     /// Send video frame to specific client
+    #[allow(dead_code)]
     async fn send_video_frame_to_client(
         &self,
         frame: &Option<VideoFrame>,
@@ -714,6 +720,7 @@ impl MoonlightServer {
     }
 
     /// Send audio frame to specific client
+    #[allow(dead_code)]
     async fn send_audio_frame_to_client(
         &self,
         frame: &Option<AudioFrame>,
@@ -735,6 +742,7 @@ impl MoonlightServer {
     }
 
     /// Parse control messages from client
+    #[allow(dead_code)]
     async fn parse_control_message(&self, data: &[u8], session_id: &Uuid) -> Result<()> {
         if data.len() < 4 {
             return Ok(());
@@ -766,6 +774,7 @@ impl MoonlightServer {
     }
 
     /// Handle controller input from client
+    #[allow(dead_code)]
     async fn handle_controller_input(&self, data: &[u8], session_id: &Uuid) -> Result<()> {
         // Parse Moonlight controller input packet
         if data.len() >= 20 {

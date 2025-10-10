@@ -22,12 +22,10 @@ pub mod zero_copy;
 // pub mod production_monitoring;    // Requires axum, prometheus, opentelemetry
 // pub mod quantum_optimization;     // Quantum computing dependencies
 
-pub use error_recovery::{CircuitBreaker, ErrorContext, ErrorRecoverySystem};
 pub use health_server::HealthServer;
 pub use moonlight::{MoonlightServer, ServerConfig};
 // pub use rtp_optimization::{FastRtpPacket, RtpPacketBatch, SIMDRtpProcessor};
 // pub use simd_ops::{CPUCapabilities, SIMDVideoProcessor};
-pub use zero_copy::{PoolConfig, VideoBufferPool, ZeroCopyVideoBuffer};
 
 // Commented out exports for disabled modules
 // pub use advanced_networking::{AdvancedNetworkingSystem, IoUringSystem, PacketProcessor, RdmaSystem};

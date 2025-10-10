@@ -176,7 +176,7 @@ impl HealthMonitor {
             Err(e) => ReadinessCheck {
                 name: "network_interface".to_string(),
                 ready: false,
-                message: format!("Network interface check failed: {}", e),
+                message: format!("Network interface check failed: {e}"),
             },
         }
     }
@@ -204,7 +204,7 @@ impl HealthMonitor {
             Err(e) => ReadinessCheck {
                 name: "disk_space".to_string(),
                 ready: false,
-                message: format!("Disk space check failed: {}", e),
+                message: format!("Disk space check failed: {e}"),
             },
         }
     }

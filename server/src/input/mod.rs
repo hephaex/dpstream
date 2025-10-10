@@ -207,6 +207,7 @@ impl ServerInputManager {
 }
 
 /// Input session for a connected client
+#[allow(dead_code)]
 struct ClientInputSession {
     id: Uuid,
     receiver: mpsc::UnboundedReceiver<MoonlightInputPacket>,
