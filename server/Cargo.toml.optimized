@@ -1,7 +1,7 @@
 # Optimized Cargo.toml for maximum performance with PGO and BOLT
 [package]
 name = "dpstream-server"
-version = "1.0.0"
+version = "2025.1.0"
 edition = "2021"
 authors = ["Mario Cho <hephaex@gmail.com>"]
 description = "Ultra-high performance remote gaming server with GPU acceleration and ML optimization"

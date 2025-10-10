@@ -2,7 +2,7 @@
 
 **Revolutionary quantum-enhanced GameCube/Wii streaming from Ubuntu servers to Nintendo Switch devices**
 
-![Version](https://img.shields.io/badge/version-2.0.0-green)
+![Version](https://img.shields.io/badge/version-2025.1.0-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Rust](https://img.shields.io/badge/rust-1.70+-orange)
 ![Production Ready](https://img.shields.io/badge/production-ready-brightgreen)
