@@ -183,7 +183,7 @@ jobs:
     - name: Generate documentation (server)
       run: |
         cd server
-        cargo doc --all --no-deps
+        cargo doc --all --no-deps --no-default-features
 
     - name: Deploy to GitHub Pages
       if: github.ref == 'refs/heads/main'
