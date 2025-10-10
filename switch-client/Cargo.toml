@@ -1,6 +1,6 @@
 [package]
 name = "dpstream-switch"
-version = "1.0.0"
+version = "2025.1.0"
 edition = "2021"
 authors = ["Mario Cho <hephaex@gmail.com>"]
 description = "Dolphin Remote Gaming Client for Nintendo Switch (Homebrew)"
