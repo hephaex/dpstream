@@ -5,19 +5,22 @@
 use crate::error::{Result, StreamingError};
 use crate::health::HealthMonitor;
 use crate::input::{MoonlightInputPacket, ServerInputManager};
-use crate::streaming::capture::{VideoCapture, VideoCaptureConfig, VideoFrame};
+// Capture module is disabled for minimal build
+// use crate::streaming::capture::{VideoCapture, VideoCaptureConfig, VideoFrame};
 use ahash::AHashMap;
 use bumpalo::Bump;
 use cache_padded::CachePadded;
 use dashmap::DashMap;
 use flume::{bounded, unbounded, Receiver, Sender};
 use once_cell::sync::Lazy;
-use parking_lot::RwLock;
+use parking_lot::{Mutex as ParkingMutex, RwLock};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
+use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -96,6 +99,16 @@ pub struct StreamConfig {
     pub stream_timeout: std::time::Duration,
     pub max_packet_size: usize,
     pub buffer_size: usize,
+}
+
+/// Video frame data (stub for disabled capture module)
+#[derive(Debug, Clone)]
+pub struct VideoFrame {
+    pub data: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    pub timestamp: u64,
+    pub frame_number: u64,
 }
 
 /// Audio frame data
@@ -229,7 +242,7 @@ impl MoonlightServer {
     pub async fn start(&mut self) -> Result<()> {
         info!("Starting Moonlight server");
 
-        *self.is_running.lock().unwrap() = true;
+        *self.is_running.lock() = true;
 
         let bind_addr = format!("{}:{}", self.config.bind_addr, self.config.port);
         let listen_addr: SocketAddr = bind_addr.parse().map_err(|e| {
@@ -291,15 +304,15 @@ impl MoonlightServer {
     pub async fn stop(&mut self) -> Result<()> {
         info!("Stopping Moonlight server");
 
-        *self.is_running.lock().unwrap() = false;
+        *self.is_running.lock() = false;
 
-        // Disconnect all sessions
-        let mut sessions = self.sessions.lock().unwrap();
-        for (session_id, session) in sessions.iter_mut() {
+        // Disconnect all sessions - DashMap doesn't have lock(), iterate directly
+        // Collect session IDs first to avoid holding iterator while mutating
+        for mut session in self.sessions.iter_mut() {
             session.state = SessionState::Terminated;
-            info!("Terminated session: {}", session_id);
+            info!("Terminated session: {}", session.id);
         }
-        sessions.clear();
+        self.sessions.clear();
 
         info!("Moonlight server stopped");
         Ok(())
@@ -309,7 +322,7 @@ impl MoonlightServer {
     pub fn broadcast_video_frame(&self, frame: VideoFrame) -> Result<()> {
         match self.video_broadcast.send(frame) {
             Ok(_) => Ok(()),
-            Err(broadcast::error::SendError(_)) => {
+            Err(_) => {
                 debug!("No video subscribers");
                 Ok(())
             }
@@ -320,7 +333,7 @@ impl MoonlightServer {
     pub fn broadcast_audio_frame(&self, frame: AudioFrame) -> Result<()> {
         match self.audio_broadcast.send(frame) {
             Ok(_) => Ok(()),
-            Err(broadcast::error::SendError(_)) => {
+            Err(_) => {
                 debug!("No audio subscribers");
                 Ok(())
             }
@@ -400,7 +413,7 @@ impl MoonlightServer {
         self.start().await?;
 
         // Main server loop
-        while *self.is_running.lock().unwrap() {
+        while *self.is_running.lock() {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
 
@@ -409,20 +422,20 @@ impl MoonlightServer {
 
     /// Get server statistics
     pub fn get_stats(&self) -> ServerStats {
-        let sessions = self.sessions.lock().unwrap();
-        let active_sessions = sessions
-            .values()
-            .filter(|s| s.state == SessionState::Streaming)
+        // DashMap doesn't need lock(), we can iterate directly
+        let active_sessions = self.sessions
+            .iter()
+            .filter(|entry| entry.value().state == SessionState::Streaming)
             .count();
 
         ServerStats {
             active_sessions,
-            total_sessions: sessions.len(),
-            is_running: *self.is_running.lock().unwrap(),
+            total_sessions: self.sessions.len(),
+            is_running: *self.is_running.lock(),  // parking_lot doesn't need unwrap
             uptime: std::time::Instant::now().duration_since(
-                sessions
-                    .values()
-                    .map(|s| s.started_at)
+                self.sessions
+                    .iter()
+                    .map(|entry| entry.value().started_at)
                     .min()
                     .unwrap_or(std::time::Instant::now()),
             ),
@@ -431,25 +444,22 @@ impl MoonlightServer {
 
     async fn handle_control_connections(
         listener: TcpListener,
-        sessions: Arc<Mutex<HashMap<Uuid, StreamingSession>>>,
-        is_running: Arc<Mutex<bool>>,
+        sessions: Arc<DashMap<Uuid, StreamingSession>>,
+        is_running: Arc<ParkingMutex<bool>>,
         config: ServerConfig,
-        video_broadcast: broadcast::Sender<VideoFrame>,
-        audio_broadcast: broadcast::Sender<AudioFrame>,
+        video_broadcast: Sender<VideoFrame>,
+        audio_broadcast: Sender<AudioFrame>,
     ) {
-        while *is_running.lock().unwrap() {
+        while *is_running.lock() {
             match listener.accept().await {
                 Ok((stream, addr)) => {
                     info!("New client connection from: {}", addr);
 
                     // Check client limit
-                    {
-                        let sessions_guard = sessions.lock().unwrap();
-                        if sessions_guard.len() >= config.max_clients {
-                            warn!("Client limit reached, rejecting connection from {}", addr);
-                            drop(stream);
-                            continue;
-                        }
+                    if sessions.len() >= config.max_clients {
+                        warn!("Client limit reached, rejecting connection from {}", addr);
+                        drop(stream);
+                        continue;
                     }
 
                     // Create new session
@@ -466,7 +476,7 @@ impl MoonlightServer {
                         stream_config: None,
                     };
 
-                    sessions.lock().unwrap().insert(session_id, session);
+                    sessions.insert(session_id, session);
 
                     // Handle client session
                     let sessions_clone = Arc::clone(&sessions);
@@ -500,22 +510,19 @@ impl MoonlightServer {
     async fn handle_client_session(
         mut stream: TcpStream,
         session_id: Uuid,
-        sessions: Arc<Mutex<HashMap<Uuid, StreamingSession>>>,
+        sessions: Arc<DashMap<Uuid, StreamingSession>>,
         config: ServerConfig,
-        video_broadcast: broadcast::Sender<VideoFrame>,
-        audio_broadcast: broadcast::Sender<AudioFrame>,
+        video_broadcast: Sender<VideoFrame>,
+        audio_broadcast: Sender<AudioFrame>,
     ) -> Result<()> {
         info!("Handling client session: {}", session_id);
 
         // Implement Moonlight protocol handshake
         debug!("Starting Moonlight handshake for session {}", session_id);
 
-        // Update session state to handshaking
-        {
-            let mut sessions_guard = sessions.lock().unwrap();
-            if let Some(session) = sessions_guard.get_mut(&session_id) {
-                session.state = SessionState::Handshaking;
-            }
+        // Update session state to handshaking - DashMap provides direct concurrent access
+        if let Some(mut session) = sessions.get_mut(&session_id) {
+            session.state = SessionState::Handshaking;
         }
 
         // Step 1: RTSP handshake for session negotiation
@@ -543,112 +550,58 @@ impl MoonlightServer {
         debug!("Stream configuration: {:?}", stream_config);
 
         // Update session to streaming state
-        {
-            let mut sessions_guard = sessions.lock().unwrap();
-            if let Some(session) = sessions_guard.get_mut(&session_id) {
-                session.state = SessionState::Streaming;
-                session.stream_config = Some(stream_config);
-            }
+        if let Some(mut session) = sessions.get_mut(&session_id) {
+            session.state = SessionState::Streaming;
+            session.stream_config = Some(stream_config);
         }
 
         info!("Moonlight handshake completed for session {}", session_id);
 
-        // Set up video stream
-        let (video_tx, mut video_rx) = mpsc::unbounded_channel();
-        let mut video_receiver = video_broadcast.subscribe();
+        // Set up video and audio streams with flume channels
+        let (video_tx, video_rx) = unbounded();
+        let (audio_tx, audio_rx) = unbounded();
 
-        tokio::spawn(async move {
-            while let Ok(frame) = video_receiver.recv().await {
-                if video_tx.send(frame).is_err() {
-                    break;
-                }
-            }
-        });
+        // Note: flume doesn't have broadcast semantics like tokio::sync::broadcast
+        // In a real implementation, we'd need to use a proper broadcast mechanism
+        // For now, these are stub channels
 
-        // Set up audio stream
-        let (audio_tx, mut audio_rx) = mpsc::unbounded_channel();
-        let mut audio_receiver = audio_broadcast.subscribe();
-
-        tokio::spawn(async move {
-            while let Ok(frame) = audio_receiver.recv().await {
-                if audio_tx.send(frame).is_err() {
-                    break;
-                }
-            }
-        });
-
-        // Set up input handling
-        let input_sender = {
-            let input_manager_guard = sessions.lock().unwrap();
-            // Note: We need to get the input manager from the server instance
-            // For now, we'll create the sender here and connect it later
-            let (input_tx, input_rx) = mpsc::unbounded_channel();
-
-            // TODO: Register this receiver with the input manager
-            // This requires refactoring to pass the input manager reference
-
-            input_tx
-        };
+        // Set up input handling with flume channel
+        let (input_tx, _input_rx) = unbounded();
 
         // Update session with streams
-        {
-            let mut sessions_guard = sessions.lock().unwrap();
-            if let Some(session) = sessions_guard.get_mut(&session_id) {
-                session.video_stream = Some(VideoStream {
-                    sender: video_tx,
-                    stats: StreamStats::default(),
-                });
-                session.audio_stream = Some(AudioStream {
-                    sender: audio_tx,
-                    stats: StreamStats::default(),
-                });
-                session.input_handler = Some(InputHandler {
-                    sender: input_sender,
-                });
-            }
+        if let Some(mut session) = sessions.get_mut(&session_id) {
+            session.video_stream = Some(VideoStream {
+                sender: video_tx,
+                stats: StreamStats::default(),
+                frame_buffer: SmallVec::new(),
+            });
+            session.audio_stream = Some(AudioStream {
+                sender: audio_tx,
+                stats: StreamStats::default(),
+                sample_buffer: SmallVec::new(),
+            });
+            session.input_handler = Some(InputHandler {
+                sender: input_tx,
+                input_buffer: SmallVec::new(),
+            });
         }
 
         info!("Client session established: {}", session_id);
 
         // Keep session alive and handle control messages
+        // NOTE: This is a stub implementation for minimal build
+        // In a full implementation, this would handle streaming and control messages
         let mut buffer = vec![0u8; 1024];
         loop {
-            tokio::select! {
-                // Handle video frames
-                frame = video_rx.recv() => {
-                    if let Some(_frame) = frame {
-                        // Send video frame to client via UDP
-                        if let Err(e) = self.send_video_frame_to_client(&frame, &session_id).await {
-                            error!("Failed to send video frame to client {}: {}", session_id, e);
-                        }
-                    }
-                }
-
-                // Handle audio frames
-                frame = audio_rx.recv() => {
-                    if let Some(_frame) = frame {
-                        // Send audio frame to client via UDP
-                        if let Err(e) = self.send_audio_frame_to_client(&frame, &session_id).await {
-                            error!("Failed to send audio frame to client {}: {}", session_id, e);
-                        }
-                    }
-                }
-
-                // Handle control messages
-                result = stream.readable() => {
-                    if result.is_err() {
-                        break;
-                    }
-
+            match stream.readable().await {
+                Ok(_) => {
                     match stream.try_read(&mut buffer) {
                         Ok(0) => break, // Connection closed
-                        Ok(n) => {
-                            // Parse control messages (RTCP, input events, etc.)
-                            if let Err(e) = self.parse_control_message(&buffer[..n], &session_id).await {
-                                warn!("Failed to parse control message from client {}: {}", session_id, e);
-                            }
+                        Ok(_n) => {
+                            // Parse control messages would go here
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
                             continue;
                         }
                         Err(e) => {
@@ -657,11 +610,12 @@ impl MoonlightServer {
                         }
                     }
                 }
+                Err(_) => break,
             }
         }
 
         // Cleanup session
-        sessions.lock().unwrap().remove(&session_id);
+        sessions.remove(&session_id);
         info!("Client session ended: {}", session_id);
 
         Ok(())
@@ -669,12 +623,12 @@ impl MoonlightServer {
 
     async fn handle_stream_data(
         socket: UdpSocket,
-        sessions: Arc<Mutex<HashMap<Uuid, StreamingSession>>>,
-        is_running: Arc<Mutex<bool>>,
+        _sessions: Arc<DashMap<Uuid, StreamingSession>>,
+        is_running: Arc<ParkingMutex<bool>>,
     ) {
         let mut buffer = vec![0u8; 65536]; // Max UDP packet size
 
-        while *is_running.lock().unwrap() {
+        while *is_running.lock() {
             match socket.recv_from(&mut buffer).await {
                 Ok((size, addr)) => {
                     debug!("Received {} bytes from {}", size, addr);
@@ -837,17 +791,10 @@ impl MoonlightServer {
             // Convert to MoonlightInputPacket
             let input_packet = self.convert_controller_input_to_moonlight(0, controller_input);
 
-            // Send to input manager if available
-            if let Some(input_manager) = self.input_manager.lock().unwrap().as_mut() {
-                // Register client if not already registered
-                if !input_manager
-                    .sessions
-                    .lock()
-                    .unwrap()
-                    .contains_key(session_id)
-                {
-                    let _sender = input_manager.register_client(*session_id)?;
-                }
+            // Send to input manager if available - parking_lot RwLock needs write()
+            if let Some(input_manager) = self.input_manager.write().as_mut() {
+                // Register client - let register_client handle whether client already exists
+                let _sender = input_manager.register_client(*session_id)?;
 
                 // TODO: Send input packet to the registered session
                 debug!("Processed controller input from client {}", session_id);
@@ -870,7 +817,8 @@ pub struct ServerStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::capture::{QualityPreset, VideoEncoder};
+    // Capture module is disabled for minimal build
+    // use crate::streaming::capture::{QualityPreset, VideoEncoder};
 
     fn create_test_config() -> ServerConfig {
         ServerConfig {

@@ -114,7 +114,7 @@ impl DpstreamError {
 }
 
 /// Error severity levels for monitoring and alerting
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ErrorSeverity {
     Low,      // Recoverable, minimal impact
     Medium,   // May impact performance
@@ -122,7 +122,7 @@ pub enum ErrorSeverity {
     Critical, // System failure, immediate attention required
 }
 /// Enhanced error reporting with context and correlation tracking
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ErrorReport {
     pub error: DpstreamError,
     pub context: Vec<String>,

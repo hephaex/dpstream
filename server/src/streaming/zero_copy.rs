@@ -6,12 +6,13 @@
 use bumpalo::Bump;
 use cache_padded::CachePadded;
 use parking_lot::{Mutex, RwLock};
-use smallvec::SmallVec;
+use smallvec::{smallvec, SmallVec};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 /// Zero-copy video buffer with pre-allocated memory pools
 #[repr(align(64))] // Cache line aligned for optimal performance
+#[derive(Debug)]
 pub struct ZeroCopyVideoBuffer {
     /// Pre-allocated video data aligned for DMA operations
     data: *mut u8,
@@ -36,14 +37,14 @@ impl ZeroCopyVideoBuffer {
         capacity: usize,
         buffer_id: u64,
         pool_id: u32,
-    ) -> Result<Self, std::alloc::AllocError> {
+    ) -> Result<Self, PoolError> {
         // Allocate aligned memory for optimal cache performance
         let layout = std::alloc::Layout::from_size_align(capacity, 64)
-            .map_err(|_| std::alloc::AllocError)?;
+            .map_err(|_| PoolError::AllocationFailed)?;
 
         let data = unsafe { std::alloc::alloc_zeroed(layout) };
         if data.is_null() {
-            return Err(std::alloc::AllocError);
+            return Err(PoolError::AllocationFailed);
         }
 
         Ok(Self {

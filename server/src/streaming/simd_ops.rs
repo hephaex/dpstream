@@ -3,6 +3,7 @@
 //! Provides high-performance video format conversion and image processing
 //! using AVX2/AVX-512 on x86_64 and ARM NEON on AArch64 platforms.
 
+#[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
 /// SIMD-accelerated video format converter with platform-specific optimizations
@@ -376,10 +377,10 @@ impl SIMDVideoProcessor {
     #[cfg(target_arch = "aarch64")]
     unsafe fn yuv_to_rgb_calc_neon(
         &self,
-        y: uint16x8_t,
-        u: uint16x8_t,
-        v: uint16x8_t,
-    ) -> (uint16x8_t, uint16x8_t, uint16x8_t) {
+        y: std::arch::aarch64::uint16x8_t,
+        u: std::arch::aarch64::uint16x8_t,
+        v: std::arch::aarch64::uint16x8_t,
+    ) -> (std::arch::aarch64::uint16x8_t, std::arch::aarch64::uint16x8_t, std::arch::aarch64::uint16x8_t) {
         use std::arch::aarch64::*;
 
         // YUV to RGB conversion constants
@@ -443,9 +444,9 @@ impl SIMDVideoProcessor {
         &self,
         rgb_data: &mut [u8],
         offset: usize,
-        r: uint8x16_t,
-        g: uint8x16_t,
-        b: uint8x16_t,
+        r: std::arch::aarch64::uint8x16_t,
+        g: std::arch::aarch64::uint8x16_t,
+        b: std::arch::aarch64::uint8x16_t,
     ) -> Result<(), SIMDError> {
         use std::arch::aarch64::*;
 

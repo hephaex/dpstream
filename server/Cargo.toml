@@ -9,7 +9,7 @@ repository = "https://github.com/hephaex/dpstream"
 
 [dependencies]
 # Async Runtime - optimized features
-tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "time", "process", "signal", "fs", "net"] }
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "time", "process", "signal", "fs", "net", "io-util"] }
 async-trait = "0.1"
 
 # Performance optimizations
@@ -32,10 +32,10 @@ bumpalo = "3.14"        # Arena allocator for temporary allocations
 mimalloc = { version = "0.1", default-features = false }  # High-performance allocator
 
 # Network & Protocols - minimal feature sets
-hyper = { version = "1.5", features = ["client", "server", "http1"] }
+hyper = { version = "0.14", features = ["client", "server", "http1", "tcp"] }
 tungstenite = { version = "0.24", default-features = false, features = ["rustls-tls-webpki-roots"] }
 mdns-sd = { version = "0.11", optional = true }  # Service discovery
-uuid = { version = "1.0", features = ["v4", "fast-rng"] }
+uuid = { version = "1.0", features = ["v4", "fast-rng", "serde"] }
 socket2 = { version = "0.5", features = ["all"] }
 tokio-util = { version = "0.7", features = ["codec", "net"] }
 hostname = "0.4"                # System hostname

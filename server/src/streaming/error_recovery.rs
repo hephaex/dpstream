@@ -25,8 +25,8 @@ pub struct ErrorRecoverySystem {
     correlations: Arc<DashMap<String, ErrorCorrelation>>,
     /// Circuit breakers for different service components
     circuit_breakers: Arc<DashMap<String, CircuitBreaker>>,
-    /// Recovery strategies registry
-    recovery_strategies: Arc<RwLock<HashMap<ErrorType, Box<dyn RecoveryStrategy + Send + Sync>>>>,
+    /// Recovery strategies registry - using Arc for clonability
+    recovery_strategies: Arc<RwLock<HashMap<ErrorType, Arc<dyn RecoveryStrategy + Send + Sync>>>>,
     /// Error event bus for distributed notifications
     error_bus: broadcast::Sender<ErrorEvent>,
     /// Performance metrics for error handling
@@ -142,7 +142,7 @@ pub struct CircuitBreaker {
 }
 
 /// Circuit breaker state machine
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CircuitBreakerState {
     /// Circuit is closed, allowing all requests
     Closed,
@@ -287,7 +287,7 @@ pub enum ErrorType {
 }
 
 /// Error severity levels
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ErrorSeverity {
     /// Low severity, minimal impact
     Low,
@@ -656,19 +656,16 @@ impl ErrorRecoverySystem {
         error_type: &ErrorType,
     ) -> Vec<Arc<dyn RecoveryStrategy + Send + Sync>> {
         let strategies = self.recovery_strategies.read();
-        let mut applicable: Vec<_> = strategies
+        let mut applicable: Vec<Arc<dyn RecoveryStrategy + Send + Sync>> = strategies
             .values()
             .filter(|strategy| strategy.can_handle(error_type))
-            .map(|strategy| strategy.clone())
+            .map(|strategy| Arc::clone(strategy))  // Clone the Arc (cheap refcount increment)
             .collect();
 
         // Sort by priority (highest first)
         applicable.sort_by(|a, b| b.priority().cmp(&a.priority()));
 
         applicable
-            .into_iter()
-            .map(|s| s as Arc<dyn RecoveryStrategy + Send + Sync>)
-            .collect()
     }
 
     /// Update circuit breaker state
