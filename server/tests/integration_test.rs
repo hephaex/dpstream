@@ -2,7 +2,6 @@
 //!
 //! Tests the complete server functionality including VPN, discovery, and emulation
 
-use dpstream_server::*;
 use std::time::Duration;
 use tokio::time::timeout;
 

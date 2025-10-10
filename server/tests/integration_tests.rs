@@ -4,14 +4,12 @@
 
 use std::time::Duration;
 use tokio::time::timeout;
-use uuid::Uuid;
 
 mod common;
 
 use common::*;
 use dpstream_server::{
     error::Result,
-    input::ServerInputManager,
     streaming::{MoonlightServer, ServerConfig},
 };
 
@@ -178,7 +176,7 @@ async fn test_concurrent_clients() -> Result<()> {
     // Connect multiple clients
     let mut client_ids = Vec::new();
     for i in 0..4 {
-        let client_id = test_env.connect_client(&format!("client_{}", i)).await?;
+        let client_id = test_env.connect_client(&format!("client_{i}")).await?;
         client_ids.push(client_id);
     }
 

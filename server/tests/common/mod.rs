@@ -3,12 +3,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use dpstream_server::{
     error::Result,
-    input::{MoonlightInputPacket, ServerInputManager},
+    input::MoonlightInputPacket,
     streaming::{AudioFrame, MoonlightServer, ServerConfig, VideoFrame},
 };
 
@@ -348,7 +347,6 @@ impl MetricsCollector {
 }
 
 /// Helper functions for generating test data
-
 pub fn generate_test_video_frames(width: u32, height: u32, count: u32) -> Vec<VideoFrame> {
     (0..count)
         .map(|i| VideoFrame {
@@ -356,11 +354,7 @@ pub fn generate_test_video_frames(width: u32, height: u32, count: u32) -> Vec<Vi
             width,
             height,
             timestamp: i as u64 * 16_666, // ~60 FPS timestamps
-            frame_type: if i % 30 == 0 {
-                "I".to_string()
-            } else {
-                "P".to_string()
-            },
+            frame_number: i as u64,
         })
         .collect()
 }
@@ -372,7 +366,7 @@ pub fn generate_test_audio_samples(
 ) -> Vec<AudioFrame> {
     let sample_count = (sample_rate as f64 * duration.as_secs_f64()) as u32;
     let frame_size = 1024; // Samples per frame
-    let frame_count = (sample_count + frame_size - 1) / frame_size;
+    let frame_count = sample_count.div_ceil(frame_size);
 
     (0..frame_count)
         .map(|i| AudioFrame {

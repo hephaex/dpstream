@@ -23,7 +23,7 @@ pub mod zero_copy;
 // pub mod quantum_optimization;     // Quantum computing dependencies
 
 pub use health_server::HealthServer;
-pub use moonlight::{MoonlightServer, ServerConfig};
+pub use moonlight::{AudioFrame, MoonlightServer, ServerConfig, VideoFrame};
 // pub use rtp_optimization::{FastRtpPacket, RtpPacketBatch, SIMDRtpProcessor};
 // pub use simd_ops::{CPUCapabilities, SIMDVideoProcessor};
 
