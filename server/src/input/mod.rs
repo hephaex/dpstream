@@ -6,17 +6,17 @@ pub mod dolphin;
 pub mod mapping;
 pub mod processor;
 
-use crate::error::{Result, InputError};
-use serde::{Serialize, Deserialize};
+use crate::error::{InputError, Result};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;
 use tokio::sync::mpsc;
-use tracing::{info, debug, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-pub use processor::InputProcessor;
-pub use mapping::{ControllerMapping, GameProfile};
 pub use dolphin::DolphinInputAdapter;
+pub use mapping::{ControllerMapping, GameProfile};
+pub use processor::InputProcessor;
 
 /// Main input manager for the server
 pub struct ServerInputManager {
@@ -40,7 +40,10 @@ impl ServerInputManager {
     }
 
     /// Register a new client session
-    pub fn register_client(&mut self, session_id: Uuid) -> Result<mpsc::UnboundedSender<MoonlightInputPacket>> {
+    pub fn register_client(
+        &mut self,
+        session_id: Uuid,
+    ) -> Result<mpsc::UnboundedSender<MoonlightInputPacket>> {
         debug!("Registering input session: {}", session_id);
 
         let (sender, receiver) = mpsc::unbounded_channel();
@@ -57,15 +60,22 @@ impl ServerInputManager {
 
         self.sessions.insert(session_id, session);
 
-        info!("Input session registered: {} (Player {})", session_id, player_slot);
+        info!(
+            "Input session registered: {} (Player {})",
+            session_id, player_slot
+        );
         Ok(sender)
     }
 
     /// Remove a client session
     pub fn unregister_client(&mut self, session_id: &Uuid) -> Result<()> {
         if let Some(session) = self.sessions.remove(session_id) {
-            info!("Input session unregistered: {} (Player {})", session_id, session.player_slot);
-            self.dolphin_adapter.disconnect_controller(session.player_slot)?;
+            info!(
+                "Input session unregistered: {} (Player {})",
+                session_id, session.player_slot
+            );
+            self.dolphin_adapter
+                .disconnect_controller(session.player_slot)?;
         }
         Ok(())
     }
@@ -89,7 +99,11 @@ impl ServerInputManager {
             let mut input_count = 0;
             while let Ok(input_packet) = session.receiver.try_recv() {
                 session.last_input_time = Instant::now();
-                inputs_to_process.push((session.player_slot, session.mapping.clone(), input_packet));
+                inputs_to_process.push((
+                    session.player_slot,
+                    session.mapping.clone(),
+                    input_packet,
+                ));
 
                 // Prevent excessive input processing in a single frame
                 input_count += 1;
@@ -109,7 +123,11 @@ impl ServerInputManager {
         let mut failed_inputs = 0;
 
         for (player_slot, mapping, input_packet) in inputs_to_process {
-            match self.processor.process_input(player_slot, mapping, input_packet).await {
+            match self
+                .processor
+                .process_input(player_slot, mapping, input_packet)
+                .await
+            {
                 Ok(_) => successful_inputs += 1,
                 Err(e) => {
                     failed_inputs += 1;
@@ -119,7 +137,10 @@ impl ServerInputManager {
         }
 
         if failed_inputs > 0 {
-            debug!("Input processing: {} successful, {} failed", successful_inputs, failed_inputs);
+            debug!(
+                "Input processing: {} successful, {} failed",
+                successful_inputs, failed_inputs
+            );
         }
 
         // Send processed inputs to Dolphin with batch size limit for performance
@@ -173,7 +194,11 @@ impl ServerInputManager {
     fn assign_player_slot(&self) -> u8 {
         // Find the first available player slot (1-4 for GameCube, 1-8 for Wii)
         for slot in 1..=4 {
-            if !self.sessions.values().any(|s| s.player_slot == slot && s.is_active) {
+            if !self
+                .sessions
+                .values()
+                .any(|s| s.player_slot == slot && s.is_active)
+            {
                 return slot;
             }
         }

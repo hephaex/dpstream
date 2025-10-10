@@ -2,11 +2,11 @@
 //!
 //! Provides shared optimization patterns and utilities across the streaming pipeline
 
+use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
+use parking_lot::Mutex;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use parking_lot::Mutex;
-use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
-use tracing::{info, debug, warn};
+use tracing::{debug, info, warn};
 
 /// Adaptive frame rate controller for quality management
 pub struct AdaptiveFrameRateController {
@@ -20,10 +20,10 @@ pub struct AdaptiveFrameRateController {
 
 #[derive(Debug, Clone, Copy)]
 pub enum NetworkQuality {
-    Excellent,  // < 10ms latency, no packet loss
-    Good,       // 10-30ms latency, < 1% packet loss
-    Fair,       // 30-50ms latency, 1-3% packet loss
-    Poor,       // > 50ms latency, > 3% packet loss
+    Excellent, // < 10ms latency, no packet loss
+    Good,      // 10-30ms latency, < 1% packet loss
+    Fair,      // 30-50ms latency, 1-3% packet loss
+    Poor,      // > 50ms latency, > 3% packet loss
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -72,8 +72,8 @@ impl AdaptiveFrameRateController {
 
         // Calculate current FPS
         if self.frame_times.len() >= 10 {
-            let avg_frame_time: Duration = self.frame_times.iter().sum::<Duration>()
-                / self.frame_times.len() as u32;
+            let avg_frame_time: Duration =
+                self.frame_times.iter().sum::<Duration>() / self.frame_times.len() as u32;
             self.current_fps = 1.0 / avg_frame_time.as_secs_f64();
         }
     }
@@ -81,10 +81,10 @@ impl AdaptiveFrameRateController {
     fn adjust_frame_rate(&mut self) {
         let adjustment_factor = match (self.network_quality, self.cpu_usage) {
             (NetworkQuality::Excellent, cpu) if cpu < 50.0 => 1.1, // Increase
-            (NetworkQuality::Good, cpu) if cpu < 70.0 => 1.0,     // Maintain
-            (NetworkQuality::Fair, _) => 0.9,                     // Decrease
-            (NetworkQuality::Poor, _) => 0.8,                     // Significant decrease
-            (_, cpu) if cpu > 80.0 => 0.85,                       // CPU overload
+            (NetworkQuality::Good, cpu) if cpu < 70.0 => 1.0,      // Maintain
+            (NetworkQuality::Fair, _) => 0.9,                      // Decrease
+            (NetworkQuality::Poor, _) => 0.8,                      // Significant decrease
+            (_, cpu) if cpu > 80.0 => 0.85,                        // CPU overload
             _ => 1.0,
         };
 
@@ -92,8 +92,10 @@ impl AdaptiveFrameRateController {
         let new_target = new_target.clamp(15, 120); // Reasonable bounds
 
         if new_target != self.target_fps {
-            info!("Adjusting target FPS from {} to {} (network: {:?}, CPU: {:.1}%)",
-                  self.target_fps, new_target, self.network_quality, self.cpu_usage);
+            info!(
+                "Adjusting target FPS from {} to {} (network: {:?}, CPU: {:.1}%)",
+                self.target_fps, new_target, self.network_quality, self.cpu_usage
+            );
             self.target_fps = new_target;
         }
     }
@@ -129,7 +131,8 @@ impl<T> PriorityFrameQueue<T> {
 
     pub fn push(&mut self, item: T, priority: u8) {
         // Check if we need to drop frames
-        let total_size = self.high_priority.len() + self.normal_priority.len() + self.low_priority.len();
+        let total_size =
+            self.high_priority.len() + self.normal_priority.len() + self.low_priority.len();
 
         if total_size >= self.max_size {
             // Drop from lowest priority first
@@ -247,8 +250,10 @@ impl StreamingThreadPool {
             .thread_name(|i| format!("processor-{}", i))
             .build()?;
 
-        info!("Initialized thread pools: {} encoding threads, {} processing threads",
-              encoding_threads, processing_threads);
+        info!(
+            "Initialized thread pools: {} encoding threads, {} processing threads",
+            encoding_threads, processing_threads
+        );
 
         Ok(Self {
             encoding_pool,
@@ -308,7 +313,7 @@ mod tests {
         let mut controller = AdaptiveFrameRateController::new(60);
 
         let metrics = QualityMetrics {
-            latency_ms: 100.0,  // Poor network
+            latency_ms: 100.0, // Poor network
             packet_loss_percent: 5.0,
             jitter_ms: 20.0,
             bandwidth_kbps: 1000,

@@ -2,10 +2,10 @@
 //!
 //! Implements low-latency audio playback using Switch audio services
 
-use crate::error::{Result, AudioError};
+use crate::error::{AudioError, Result};
 use crate::sys::memory::{check_memory_pressure, MemoryPressure};
-use alloc::vec::Vec;
 use alloc::collections::VecDeque;
+use alloc::vec::Vec;
 use core::ptr::NonNull;
 use core::time::Duration;
 
@@ -38,14 +38,14 @@ pub struct AudioConfig {
 impl Default for AudioConfig {
     fn default() -> Self {
         Self {
-            sample_rate: 48000,  // Switch native sample rate
-            channels: 2,         // Stereo
-            bit_depth: 16,       // 16-bit samples
-            buffer_count: 4,     // Small buffer count for low latency
-            buffer_size: 1024,   // 1024 samples per buffer
+            sample_rate: 48000, // Switch native sample rate
+            channels: 2,        // Stereo
+            bit_depth: 16,      // 16-bit samples
+            buffer_count: 4,    // Small buffer count for low latency
+            buffer_size: 1024,  // 1024 samples per buffer
             low_latency_mode: true,
             volume: 1.0,
-            enable_effects: false,  // Disable audio effects for gaming
+            enable_effects: false, // Disable audio effects for gaming
         }
     }
 }
@@ -111,7 +111,11 @@ impl AudioBufferPool {
     }
 
     pub fn stats(&self) -> (usize, usize, usize) {
-        (self.total_buffers, self.buffers.len(), self.total_buffers - self.buffers.len())
+        (
+            self.total_buffers,
+            self.buffers.len(),
+            self.total_buffers - self.buffers.len(),
+        )
     }
 }
 
@@ -134,7 +138,7 @@ pub struct AudioPlayer {
     is_playing: bool,
     stats: AudioStats,
     decoder: Option<AudioDecoder>,
-    audio_handle: Option<u32>,  // Switch audio service handle
+    audio_handle: Option<u32>, // Switch audio service handle
 }
 
 /// Audio decoder for various codecs
@@ -183,14 +187,12 @@ impl AudioPlayer {
             return Err(AudioError::InsufficientMemory {
                 requested: total_memory_needed,
                 available: crate::sys::memory::get_memory_stats()?.free_heap,
-            }.into());
+            }
+            .into());
         }
 
         // Initialize buffer pool
-        self.buffer_pool = Some(AudioBufferPool::new(
-            self.config.buffer_count,
-            buffer_size,
-        )?);
+        self.buffer_pool = Some(AudioBufferPool::new(self.config.buffer_count, buffer_size)?);
 
         // Initialize audio decoder
         self.decoder = Some(AudioDecoder::new(self.config.clone())?);
@@ -440,11 +442,7 @@ impl AudioDecoder {
 
         // Copy PCM data
         unsafe {
-            core::ptr::copy_nonoverlapping(
-                frame.data.as_ptr(),
-                buffer.as_ptr(),
-                frame.data.len(),
-            );
+            core::ptr::copy_nonoverlapping(frame.data.as_ptr(), buffer.as_ptr(), frame.data.len());
         }
 
         Ok(Some(AudioBuffer {
@@ -586,7 +584,7 @@ mod tests {
         assert!(result.is_ok());
 
         let buffer = result.unwrap().unwrap();
-        assert_eq!(buffer.size, 64);  // 8 * 8 expansion
+        assert_eq!(buffer.size, 64); // 8 * 8 expansion
         assert_eq!(buffer.sample_count, 2);
     }
 

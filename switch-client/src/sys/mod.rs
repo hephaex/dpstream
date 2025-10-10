@@ -4,7 +4,7 @@
 
 pub mod libnx;
 pub mod memory;
-pub mod time;
 pub mod optimization;
+pub mod time;
 
 pub use libnx::LibnxSystem;

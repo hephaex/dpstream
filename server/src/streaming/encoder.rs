@@ -4,13 +4,15 @@
 
 use crate::error::{Result, StreamingError};
 use crate::streaming::capture::VideoFrame;
-use crate::streaming::{VideoBufferPool, ZeroCopyVideoBuffer, PoolConfig, SIMDVideoProcessor, CPUCapabilities};
+use crate::streaming::{
+    CPUCapabilities, PoolConfig, SIMDVideoProcessor, VideoBufferPool, ZeroCopyVideoBuffer,
+};
+use smallvec::smallvec;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
-use tracing::{info, debug, error, warn};
-use smallvec::smallvec;
+use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "streaming")]
 use gstreamer as gst;
@@ -22,15 +24,15 @@ use gstreamer_app as gst_app;
 pub struct EncoderConfig {
     pub encoder_type: EncoderType,
     pub codec: VideoCodec,
-    pub bitrate: u32,       // kbps
-    pub max_bitrate: u32,   // kbps for VBR
+    pub bitrate: u32,     // kbps
+    pub max_bitrate: u32, // kbps for VBR
     pub rate_control: RateControlMode,
     pub preset: EncoderPreset,
     pub profile: H264Profile,
     pub level: H264Level,
-    pub gop_size: u32,      // Keyframe interval
-    pub b_frames: u32,      // B-frame count
-    pub ref_frames: u32,    // Reference frame count
+    pub gop_size: u32,   // Keyframe interval
+    pub b_frames: u32,   // B-frame count
+    pub ref_frames: u32, // Reference frame count
     pub width: u32,
     pub height: u32,
     pub fps: u32,
@@ -41,10 +43,10 @@ pub struct EncoderConfig {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EncoderType {
-    NVENC,      // NVIDIA hardware encoder
-    VAAPI,      // Intel/AMD hardware encoder
-    QuickSync,  // Intel QuickSync
-    Software,   // CPU-based x264/x265
+    NVENC,     // NVIDIA hardware encoder
+    VAAPI,     // Intel/AMD hardware encoder
+    QuickSync, // Intel QuickSync
+    Software,  // CPU-based x264/x265
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -56,10 +58,10 @@ pub enum VideoCodec {
 
 #[derive(Debug, Clone, Copy)]
 pub enum RateControlMode {
-    CBR,        // Constant bitrate
-    VBR,        // Variable bitrate
-    CQP,        // Constant quantization parameter
-    VBR_HQ,     // High quality VBR
+    CBR,    // Constant bitrate
+    VBR,    // Variable bitrate
+    CQP,    // Constant quantization parameter
+    VBR_HQ, // High quality VBR
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -109,9 +111,9 @@ impl Default for EncoderConfig {
             preset: EncoderPreset::Fast,
             profile: H264Profile::High,
             level: H264Level::Level4_1,
-            gop_size: 60,       // 1 second at 60fps
-            b_frames: 0,        // No B-frames for low latency
-            ref_frames: 1,      // Minimum for low latency
+            gop_size: 60,  // 1 second at 60fps
+            b_frames: 0,   // No B-frames for low latency
+            ref_frames: 1, // Minimum for low latency
             width: 1920,
             height: 1080,
             fps: 60,
@@ -182,23 +184,31 @@ pub struct EncoderPerformanceStats {
 impl VideoEncoder {
     /// Create a new high-performance hardware encoder with zero-copy optimization
     pub fn new(config: EncoderConfig) -> Result<Self> {
-        info!("Initializing high-performance {:?} video encoder", config.encoder_type);
-        debug!("Configuration: {}x{} @ {}fps, {}kbps {:?}",
-               config.width, config.height, config.fps, config.bitrate, config.codec);
+        info!(
+            "Initializing high-performance {:?} video encoder",
+            config.encoder_type
+        );
+        debug!(
+            "Configuration: {}x{} @ {}fps, {}kbps {:?}",
+            config.width, config.height, config.fps, config.bitrate, config.codec
+        );
 
         // Validate configuration
         Self::validate_config(&config)?;
 
         // Initialize CPU capabilities and SIMD processor
         let cpu_capabilities = CPUCapabilities::detect();
-        info!("Detected CPU capabilities: AVX2={}, NEON={}",
-              cpu_capabilities.has_avx2, cpu_capabilities.has_neon);
+        info!(
+            "Detected CPU capabilities: AVX2={}, NEON={}",
+            cpu_capabilities.has_avx2, cpu_capabilities.has_neon
+        );
 
-        let simd_processor = SIMDVideoProcessor::new(cpu_capabilities.clone())
-            .map_err(|e| StreamingError::InitializationFailed {
+        let simd_processor = SIMDVideoProcessor::new(cpu_capabilities.clone()).map_err(|e| {
+            StreamingError::InitializationFailed {
                 component: "SIMD Processor".to_string(),
                 reason: e.to_string(),
-            })?;
+            }
+        })?;
 
         // Create optimized buffer pool configuration
         let pool_config = PoolConfig {
@@ -212,11 +222,12 @@ impl VideoEncoder {
             max_memory_bytes: 128 * 1024 * 1024, // 128MB for encoder
         };
 
-        let buffer_pool = Arc::new(VideoBufferPool::new(pool_config)
-            .map_err(|e| StreamingError::InitializationFailed {
+        let buffer_pool = Arc::new(VideoBufferPool::new(pool_config).map_err(|e| {
+            StreamingError::InitializationFailed {
                 component: "Buffer Pool".to_string(),
                 reason: e.to_string(),
-            })?);
+            }
+        })?);
 
         info!("Zero-copy buffer pool initialized with optimized tiers");
 
@@ -270,22 +281,29 @@ impl VideoEncoder {
     }
 
     /// High-performance zero-copy frame encoding with SIMD acceleration
-    pub async fn encode_frame_optimized(&mut self, frame: VideoFrame) -> Result<Option<EncodedFrame>> {
+    pub async fn encode_frame_optimized(
+        &mut self,
+        frame: VideoFrame,
+    ) -> Result<Option<EncodedFrame>> {
         if !*self.is_encoding.lock().unwrap() {
-            return Err(StreamingError::VideoEncodingFailed(
-                "Encoder not initialized".to_string()
-            ).into());
+            return Err(
+                StreamingError::VideoEncodingFailed("Encoder not initialized".to_string()).into(),
+            );
         }
 
         let start_time = Instant::now();
 
         // Get zero-copy buffer from pool
         let required_size = (self.config.width * self.config.height * 3 / 2) as usize;
-        let zero_copy_buffer = self.buffer_pool
+        let zero_copy_buffer = self
+            .buffer_pool
             .acquire_buffer(required_size)
-            .map_err(|e| StreamingError::VideoEncodingFailed(
-                format!("Failed to acquire zero-copy buffer: {}", e)
-            ))?;
+            .map_err(|e| {
+                StreamingError::VideoEncodingFailed(format!(
+                    "Failed to acquire zero-copy buffer: {}",
+                    e
+                ))
+            })?;
 
         // Perform SIMD-accelerated color space conversion if needed
         let processed_frame = if frame.data.len() != required_size {
@@ -296,14 +314,14 @@ impl VideoEncoder {
             match simd_processor.convert_rgb24_to_yuv420(
                 &frame.data,
                 frame.width as usize,
-                frame.height as usize
+                frame.height as usize,
             ) {
                 Ok(converted_data) => {
                     // Copy converted data to zero-copy buffer
                     let buffer_data = unsafe {
                         std::slice::from_raw_parts_mut(
                             zero_copy_buffer.data().as_ptr() as *mut u8,
-                            converted_data.len()
+                            converted_data.len(),
                         )
                     };
                     buffer_data.copy_from_slice(&converted_data);
@@ -327,7 +345,8 @@ impl VideoEncoder {
         };
 
         // Proceed with regular encoding
-        self.encode_frame_internal(processed_frame, start_time).await
+        self.encode_frame_internal(processed_frame, start_time)
+            .await
     }
 
     /// Encode a video frame (legacy method for compatibility)
@@ -337,11 +356,15 @@ impl VideoEncoder {
     }
 
     /// Internal frame encoding implementation shared by optimized and legacy methods
-    async fn encode_frame_internal(&mut self, frame: VideoFrame, start_time: Instant) -> Result<Option<EncodedFrame>> {
+    async fn encode_frame_internal(
+        &mut self,
+        frame: VideoFrame,
+        start_time: Instant,
+    ) -> Result<Option<EncodedFrame>> {
         if !*self.is_encoding.lock().unwrap() {
-            return Err(StreamingError::VideoEncodingFailed(
-                "Encoder not initialized".to_string()
-            ).into());
+            return Err(
+                StreamingError::VideoEncodingFailed("Encoder not initialized".to_string()).into(),
+            );
         }
 
         // Add frame to queue
@@ -372,8 +395,7 @@ impl VideoEncoder {
             let mut stats = self.stats.lock().unwrap();
             stats.frames_encoded += 1;
             let encoding_time = start_time.elapsed();
-            stats.average_encoding_time =
-                (stats.average_encoding_time + encoding_time) / 2;
+            stats.average_encoding_time = (stats.average_encoding_time + encoding_time) / 2;
         }
 
         // For now, return a simulated encoded frame
@@ -411,11 +433,21 @@ impl VideoEncoder {
         EncoderPerformanceStats {
             encoder_stats,
             buffer_pool_hit_rate: pool_hit_rate,
-            total_pool_allocations: pool_stats.total_allocations.load(std::sync::atomic::Ordering::Relaxed),
-            pool_hits: pool_stats.pool_hits.load(std::sync::atomic::Ordering::Relaxed),
-            pool_misses: pool_stats.pool_misses.load(std::sync::atomic::Ordering::Relaxed),
-            peak_buffer_usage: pool_stats.peak_usage.load(std::sync::atomic::Ordering::Relaxed),
-            current_buffer_usage: pool_stats.current_usage.load(std::sync::atomic::Ordering::Relaxed),
+            total_pool_allocations: pool_stats
+                .total_allocations
+                .load(std::sync::atomic::Ordering::Relaxed),
+            pool_hits: pool_stats
+                .pool_hits
+                .load(std::sync::atomic::Ordering::Relaxed),
+            pool_misses: pool_stats
+                .pool_misses
+                .load(std::sync::atomic::Ordering::Relaxed),
+            peak_buffer_usage: pool_stats
+                .peak_usage
+                .load(std::sync::atomic::Ordering::Relaxed),
+            current_buffer_usage: pool_stats
+                .current_usage
+                .load(std::sync::atomic::Ordering::Relaxed),
             cpu_capabilities: self.cpu_capabilities.clone(),
         }
     }
@@ -457,11 +489,12 @@ impl VideoEncoder {
         #[cfg(feature = "streaming")]
         {
             if let Some(pipeline) = &self.pipeline {
-                pipeline.set_state(gst::State::Null)
-                    .map_err(|e| StreamingError::PipelineError {
+                pipeline.set_state(gst::State::Null).map_err(|e| {
+                    StreamingError::PipelineError {
                         operation: "shutdown".to_string(),
                         reason: e.to_string(),
-                    })?;
+                    }
+                })?;
             }
             self.pipeline = None;
             self.appsrc = None;
@@ -481,7 +514,8 @@ impl VideoEncoder {
                 field: "bitrate".to_string(),
                 value: config.bitrate.to_string(),
                 reason: "Bitrate must be greater than 0".to_string(),
-            }.into());
+            }
+            .into());
         }
 
         if config.width == 0 || config.height == 0 {
@@ -489,7 +523,8 @@ impl VideoEncoder {
                 field: "resolution".to_string(),
                 value: format!("{}x{}", config.width, config.height),
                 reason: "Resolution must be greater than 0".to_string(),
-            }.into());
+            }
+            .into());
         }
 
         if config.fps == 0 {
@@ -497,7 +532,8 @@ impl VideoEncoder {
                 field: "fps".to_string(),
                 value: config.fps.to_string(),
                 reason: "FPS must be greater than 0".to_string(),
-            }.into());
+            }
+            .into());
         }
 
         Ok(())
@@ -536,24 +572,20 @@ impl VideoEncoder {
             .build();
 
         // Add elements to pipeline
-        pipeline.add_many(&[
-            appsrc.upcast_ref(),
-            &encoder,
-            appsink.upcast_ref(),
-        ]).map_err(|e| StreamingError::PipelineError {
-            operation: "add elements".to_string(),
-            reason: e.to_string(),
-        })?;
+        pipeline
+            .add_many(&[appsrc.upcast_ref(), &encoder, appsink.upcast_ref()])
+            .map_err(|e| StreamingError::PipelineError {
+                operation: "add elements".to_string(),
+                reason: e.to_string(),
+            })?;
 
         // Link elements
-        gst::Element::link_many(&[
-            appsrc.upcast_ref(),
-            &encoder,
-            appsink.upcast_ref(),
-        ]).map_err(|e| StreamingError::PipelineError {
-            operation: "link elements".to_string(),
-            reason: e.to_string(),
-        })?;
+        gst::Element::link_many(&[appsrc.upcast_ref(), &encoder, appsink.upcast_ref()]).map_err(
+            |e| StreamingError::PipelineError {
+                operation: "link elements".to_string(),
+                reason: e.to_string(),
+            },
+        )?;
 
         // Set up encoded frame callback
         let encoded_sender = self.encoded_sender.take().unwrap();
@@ -617,75 +649,89 @@ impl VideoEncoder {
 
     #[cfg(feature = "streaming")]
     fn create_encoder_element(&self) -> Result<gst::Element> {
-        let encoder = match self.config.encoder_type {
-            EncoderType::NVENC => {
-                debug!("Creating NVENC H264 encoder");
-                let encoder = gst::ElementFactory::make("nvh264enc", Some("encoder"))
-                    .map_err(|e| StreamingError::EncoderNotAvailable {
-                        encoder: "NVENC".to_string(),
-                        reason: e.to_string(),
-                    })?;
+        let encoder =
+            match self.config.encoder_type {
+                EncoderType::NVENC => {
+                    debug!("Creating NVENC H264 encoder");
+                    let encoder =
+                        gst::ElementFactory::make("nvh264enc", Some("encoder")).map_err(|e| {
+                            StreamingError::EncoderNotAvailable {
+                                encoder: "NVENC".to_string(),
+                                reason: e.to_string(),
+                            }
+                        })?;
 
-                // Configure NVENC settings for low latency
-                encoder.set_property("bitrate", self.config.bitrate);
-                encoder.set_property("preset", self.nvenc_preset());
-                encoder.set_property("rc-mode", self.nvenc_rate_control());
-                encoder.set_property("gop-size", self.config.gop_size);
-                encoder.set_property("b-frames", self.config.b_frames);
-                encoder.set_property("zerolatency", self.config.low_latency);
-                encoder.set_property("aud", true); // Access unit delimiters
-                encoder.set_property("cabac", false); // Disable for baseline profile
+                    // Configure NVENC settings for low latency
+                    encoder.set_property("bitrate", self.config.bitrate);
+                    encoder.set_property("preset", self.nvenc_preset());
+                    encoder.set_property("rc-mode", self.nvenc_rate_control());
+                    encoder.set_property("gop-size", self.config.gop_size);
+                    encoder.set_property("b-frames", self.config.b_frames);
+                    encoder.set_property("zerolatency", self.config.low_latency);
+                    encoder.set_property("aud", true); // Access unit delimiters
+                    encoder.set_property("cabac", false); // Disable for baseline profile
 
-                if self.config.low_latency {
-                    encoder.set_property("tune", "ultra-low-latency");
+                    if self.config.low_latency {
+                        encoder.set_property("tune", "ultra-low-latency");
+                    }
+
+                    encoder
                 }
+                EncoderType::VAAPI => {
+                    debug!("Creating VAAPI H264 encoder");
+                    let encoder = gst::ElementFactory::make("vaapih264enc", Some("encoder"))
+                        .map_err(|e| StreamingError::EncoderNotAvailable {
+                            encoder: "VAAPI".to_string(),
+                            reason: e.to_string(),
+                        })?;
 
-                encoder
-            }
-            EncoderType::VAAPI => {
-                debug!("Creating VAAPI H264 encoder");
-                let encoder = gst::ElementFactory::make("vaapih264enc", Some("encoder"))
-                    .map_err(|e| StreamingError::EncoderNotAvailable {
-                        encoder: "VAAPI".to_string(),
-                        reason: e.to_string(),
-                    })?;
+                    encoder.set_property("bitrate", self.config.bitrate);
+                    encoder.set_property("rate-control", self.vaapi_rate_control());
+                    encoder.set_property("keyframe-period", self.config.gop_size);
 
-                encoder.set_property("bitrate", self.config.bitrate);
-                encoder.set_property("rate-control", self.vaapi_rate_control());
-                encoder.set_property("keyframe-period", self.config.gop_size);
+                    encoder
+                }
+                EncoderType::QuickSync => {
+                    debug!("Creating QuickSync H264 encoder");
+                    let encoder =
+                        gst::ElementFactory::make("mfh264enc", Some("encoder")).map_err(|e| {
+                            StreamingError::EncoderNotAvailable {
+                                encoder: "QuickSync".to_string(),
+                                reason: e.to_string(),
+                            }
+                        })?;
 
-                encoder
-            }
-            EncoderType::QuickSync => {
-                debug!("Creating QuickSync H264 encoder");
-                let encoder = gst::ElementFactory::make("mfh264enc", Some("encoder"))
-                    .map_err(|e| StreamingError::EncoderNotAvailable {
-                        encoder: "QuickSync".to_string(),
-                        reason: e.to_string(),
-                    })?;
+                    encoder.set_property("bitrate", self.config.bitrate);
 
-                encoder.set_property("bitrate", self.config.bitrate);
+                    encoder
+                }
+                EncoderType::Software => {
+                    debug!("Creating software H264 encoder");
+                    let encoder =
+                        gst::ElementFactory::make("x264enc", Some("encoder")).map_err(|e| {
+                            StreamingError::EncoderNotAvailable {
+                                encoder: "x264".to_string(),
+                                reason: e.to_string(),
+                            }
+                        })?;
 
-                encoder
-            }
-            EncoderType::Software => {
-                debug!("Creating software H264 encoder");
-                let encoder = gst::ElementFactory::make("x264enc", Some("encoder"))
-                    .map_err(|e| StreamingError::EncoderNotAvailable {
-                        encoder: "x264".to_string(),
-                        reason: e.to_string(),
-                    })?;
+                    encoder.set_property("bitrate", self.config.bitrate);
+                    encoder.set_property("speed-preset", self.x264_preset());
+                    encoder.set_property(
+                        "tune",
+                        if self.config.low_latency {
+                            "zerolatency"
+                        } else {
+                            "film"
+                        },
+                    );
+                    encoder.set_property("key-int-max", self.config.gop_size);
+                    encoder.set_property("b-frames", self.config.b_frames);
+                    encoder.set_property("ref", self.config.ref_frames);
 
-                encoder.set_property("bitrate", self.config.bitrate);
-                encoder.set_property("speed-preset", self.x264_preset());
-                encoder.set_property("tune", if self.config.low_latency { "zerolatency" } else { "film" });
-                encoder.set_property("key-int-max", self.config.gop_size);
-                encoder.set_property("b-frames", self.config.b_frames);
-                encoder.set_property("ref", self.config.ref_frames);
-
-                encoder
-            }
-        };
+                    encoder
+                }
+            };
 
         Ok(encoder)
     }
@@ -695,7 +741,8 @@ impl VideoEncoder {
         if let Some(pipeline) = &self.pipeline {
             debug!("Starting encoding pipeline");
 
-            pipeline.set_state(gst::State::Playing)
+            pipeline
+                .set_state(gst::State::Playing)
                 .map_err(|e| StreamingError::PipelineError {
                     operation: "start encoding".to_string(),
                     reason: e.to_string(),
@@ -705,20 +752,22 @@ impl VideoEncoder {
             let bus = pipeline.bus().unwrap();
             let state_change = pipeline.state_change_timeout();
 
-            match bus.timed_pop_filtered(state_change, &[gst::MessageType::StateChanged, gst::MessageType::Error]) {
-                Some(msg) => {
-                    match msg.view() {
-                        gst::MessageView::Error(err) => {
-                            return Err(StreamingError::PipelineError {
-                                operation: "encoding pipeline startup".to_string(),
-                                reason: format!("{}: {}", err.error(), err.debug().unwrap_or_default()),
-                            }.into());
+            match bus.timed_pop_filtered(
+                state_change,
+                &[gst::MessageType::StateChanged, gst::MessageType::Error],
+            ) {
+                Some(msg) => match msg.view() {
+                    gst::MessageView::Error(err) => {
+                        return Err(StreamingError::PipelineError {
+                            operation: "encoding pipeline startup".to_string(),
+                            reason: format!("{}: {}", err.error(), err.debug().unwrap_or_default()),
                         }
-                        _ => {
-                            debug!("Encoding pipeline started successfully");
-                        }
+                        .into());
                     }
-                }
+                    _ => {
+                        debug!("Encoding pipeline started successfully");
+                    }
+                },
                 None => {
                     warn!("Encoding pipeline startup timeout");
                 }
@@ -729,7 +778,11 @@ impl VideoEncoder {
     }
 
     #[cfg(feature = "streaming")]
-    async fn push_frame_to_pipeline(&self, appsrc: &gst_app::AppSrc, frame: &VideoFrame) -> Result<()> {
+    async fn push_frame_to_pipeline(
+        &self,
+        appsrc: &gst_app::AppSrc,
+        frame: &VideoFrame,
+    ) -> Result<()> {
         let buffer = gst::Buffer::from_slice(frame.data.clone());
 
         // Set buffer timestamp
@@ -742,9 +795,11 @@ impl VideoEncoder {
                 debug!("Pipeline is flushing, dropping frame");
                 Ok(())
             }
-            Err(e) => Err(StreamingError::VideoEncodingFailed(
-                format!("Failed to push frame to encoder: {:?}", e)
-            ).into())
+            Err(e) => Err(StreamingError::VideoEncodingFailed(format!(
+                "Failed to push frame to encoder: {:?}",
+                e
+            ))
+            .into()),
         }
     }
 

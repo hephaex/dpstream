@@ -2,7 +2,7 @@
 //!
 //! Manages Joy-Con, Pro Controller, and touch input
 
-use crate::error::{Result, InputError};
+use crate::error::{InputError, Result};
 use bitflags::bitflags;
 
 /// Main input manager
@@ -291,10 +291,7 @@ pub struct AnalogStick {
 impl AnalogStick {
     /// Get normalized float values (-1.0 to 1.0)
     pub fn normalized(&self) -> (f32, f32) {
-        (
-            self.x as f32 / 32767.0,
-            self.y as f32 / 32767.0,
-        )
+        (self.x as f32 / 32767.0, self.y as f32 / 32767.0)
     }
 
     /// Get magnitude of stick deflection (0.0 to 1.0)
@@ -387,30 +384,66 @@ impl InputState {
         let mut gamepad_buttons = 0u16;
 
         // Map Switch buttons to Xbox controller buttons (Moonlight format)
-        if self.buttons.contains(Buttons::A) { gamepad_buttons |= 0x1000; } // A
-        if self.buttons.contains(Buttons::B) { gamepad_buttons |= 0x2000; } // B
-        if self.buttons.contains(Buttons::X) { gamepad_buttons |= 0x4000; } // X
-        if self.buttons.contains(Buttons::Y) { gamepad_buttons |= 0x8000; } // Y
+        if self.buttons.contains(Buttons::A) {
+            gamepad_buttons |= 0x1000;
+        } // A
+        if self.buttons.contains(Buttons::B) {
+            gamepad_buttons |= 0x2000;
+        } // B
+        if self.buttons.contains(Buttons::X) {
+            gamepad_buttons |= 0x4000;
+        } // X
+        if self.buttons.contains(Buttons::Y) {
+            gamepad_buttons |= 0x8000;
+        } // Y
 
-        if self.buttons.contains(Buttons::L) { gamepad_buttons |= 0x0100; } // Left shoulder
-        if self.buttons.contains(Buttons::R) { gamepad_buttons |= 0x0200; } // Right shoulder
+        if self.buttons.contains(Buttons::L) {
+            gamepad_buttons |= 0x0100;
+        } // Left shoulder
+        if self.buttons.contains(Buttons::R) {
+            gamepad_buttons |= 0x0200;
+        } // Right shoulder
 
-        if self.buttons.contains(Buttons::MINUS) { gamepad_buttons |= 0x0020; } // Back
-        if self.buttons.contains(Buttons::PLUS) { gamepad_buttons |= 0x0010; } // Start
+        if self.buttons.contains(Buttons::MINUS) {
+            gamepad_buttons |= 0x0020;
+        } // Back
+        if self.buttons.contains(Buttons::PLUS) {
+            gamepad_buttons |= 0x0010;
+        } // Start
 
-        if self.buttons.contains(Buttons::L_STICK) { gamepad_buttons |= 0x0040; } // Left thumb
-        if self.buttons.contains(Buttons::R_STICK) { gamepad_buttons |= 0x0080; } // Right thumb
+        if self.buttons.contains(Buttons::L_STICK) {
+            gamepad_buttons |= 0x0040;
+        } // Left thumb
+        if self.buttons.contains(Buttons::R_STICK) {
+            gamepad_buttons |= 0x0080;
+        } // Right thumb
 
-        if self.buttons.contains(Buttons::D_UP) { gamepad_buttons |= 0x0001; }
-        if self.buttons.contains(Buttons::D_DOWN) { gamepad_buttons |= 0x0002; }
-        if self.buttons.contains(Buttons::D_LEFT) { gamepad_buttons |= 0x0004; }
-        if self.buttons.contains(Buttons::D_RIGHT) { gamepad_buttons |= 0x0008; }
+        if self.buttons.contains(Buttons::D_UP) {
+            gamepad_buttons |= 0x0001;
+        }
+        if self.buttons.contains(Buttons::D_DOWN) {
+            gamepad_buttons |= 0x0002;
+        }
+        if self.buttons.contains(Buttons::D_LEFT) {
+            gamepad_buttons |= 0x0004;
+        }
+        if self.buttons.contains(Buttons::D_RIGHT) {
+            gamepad_buttons |= 0x0008;
+        }
 
         MoonlightInput {
             packet_type: 0x0C, // Multi-controller packet
             button_flags: gamepad_buttons,
-            left_trigger: if self.buttons.contains(Buttons::ZL) { 255 } else { 0 },
-            right_trigger: if self.buttons.contains(Buttons::ZR) { 255 } else { 0 },
+            left_trigger: if self.buttons.contains(Buttons::ZL) {
+                255
+            } else {
+                0
+            },
+            right_trigger: if self.buttons.contains(Buttons::ZR) {
+                255
+            } else {
+                0
+            },
             left_stick_x: self.left_stick.x,
             left_stick_y: self.left_stick.y,
             right_stick_x: self.right_stick.x,

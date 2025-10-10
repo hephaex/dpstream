@@ -3,13 +3,13 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use uuid::Uuid;
 use tokio::sync::mpsc;
+use uuid::Uuid;
 
 use dpstream_server::{
-    streaming::{MoonlightServer, ServerConfig, VideoFrame, AudioFrame},
-    input::{MoonlightInputPacket, ServerInputManager},
     error::Result,
+    input::{MoonlightInputPacket, ServerInputManager},
+    streaming::{AudioFrame, MoonlightServer, ServerConfig, VideoFrame},
 };
 
 /// Test environment for integration testing
@@ -76,8 +76,8 @@ impl TestEnvironment {
     pub async fn new() -> Result<Self> {
         let config = ServerConfig {
             bind_addr: "127.0.0.1".to_string(),
-            port: 0, // Let OS choose available port
-            max_clients: 8, // Increased for testing
+            port: 0,                  // Let OS choose available port
+            max_clients: 8,           // Increased for testing
             enable_encryption: false, // Disable for testing
             enable_authentication: false,
             stream_timeout_ms: 10000, // Longer timeout for testing
@@ -161,7 +161,11 @@ impl TestEnvironment {
     }
 
     /// Send video frame to specific client
-    pub async fn send_video_frame_to_client(&self, client_id: &Uuid, frame: VideoFrame) -> Result<()> {
+    pub async fn send_video_frame_to_client(
+        &self,
+        client_id: &Uuid,
+        frame: VideoFrame,
+    ) -> Result<()> {
         {
             let mut sessions = self.sessions.lock().unwrap();
             if let Some(session) = sessions.get_mut(client_id) {
@@ -268,7 +272,7 @@ impl TestEnvironment {
     pub async fn connect_invalid_client(&self) -> Result<Uuid> {
         // Simulate connection failure
         Err(dpstream_server::error::DpstreamError::Network(
-            dpstream_server::error::NetworkError::ConnectionFailed("Invalid client".to_string())
+            dpstream_server::error::NetworkError::ConnectionFailed("Invalid client".to_string()),
         ))
     }
 
@@ -346,26 +350,38 @@ impl MetricsCollector {
 /// Helper functions for generating test data
 
 pub fn generate_test_video_frames(width: u32, height: u32, count: u32) -> Vec<VideoFrame> {
-    (0..count).map(|i| VideoFrame {
-        data: vec![0u8; (width * height * 3) as usize], // RGB data
-        width,
-        height,
-        timestamp: i as u64 * 16_666, // ~60 FPS timestamps
-        frame_type: if i % 30 == 0 { "I".to_string() } else { "P".to_string() },
-    }).collect()
+    (0..count)
+        .map(|i| VideoFrame {
+            data: vec![0u8; (width * height * 3) as usize], // RGB data
+            width,
+            height,
+            timestamp: i as u64 * 16_666, // ~60 FPS timestamps
+            frame_type: if i % 30 == 0 {
+                "I".to_string()
+            } else {
+                "P".to_string()
+            },
+        })
+        .collect()
 }
 
-pub fn generate_test_audio_samples(sample_rate: u32, channels: u16, duration: Duration) -> Vec<AudioFrame> {
+pub fn generate_test_audio_samples(
+    sample_rate: u32,
+    channels: u16,
+    duration: Duration,
+) -> Vec<AudioFrame> {
     let sample_count = (sample_rate as f64 * duration.as_secs_f64()) as u32;
     let frame_size = 1024; // Samples per frame
     let frame_count = (sample_count + frame_size - 1) / frame_size;
 
-    (0..frame_count).map(|i| AudioFrame {
-        data: vec![0u8; (frame_size * channels as u32 * 2) as usize], // 16-bit samples
-        timestamp: i as u64 * 21, // ~48kHz frame timing
-        sample_rate,
-        channels,
-    }).collect()
+    (0..frame_count)
+        .map(|i| AudioFrame {
+            data: vec![0u8; (frame_size * channels as u32 * 2) as usize], // 16-bit samples
+            timestamp: i as u64 * 21,                                     // ~48kHz frame timing
+            sample_rate,
+            channels,
+        })
+        .collect()
 }
 
 pub fn create_button_input(button_flags: u16, pressed: bool) -> MoonlightInputPacket {

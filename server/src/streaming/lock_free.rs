@@ -3,19 +3,19 @@
 //! Implements advanced lock-free algorithms optimized for high-concurrency
 //! streaming scenarios with 8+ concurrent clients.
 
-use std::sync::atomic::{AtomicPtr, AtomicUsize, AtomicU64, Ordering};
-use std::sync::Arc;
-use std::ptr::{null_mut, NonNull};
-use std::mem::{ManuallyDrop, MaybeUninit};
-use cache_padded::CachePadded;
-use crossbeam_epoch::{self as epoch, Atomic, Owned, Shared, Guard};
-use parking_lot::RwLock;
-use dashmap::DashMap;
-use uuid::Uuid;
-use smallvec::SmallVec;
 use arrayvec::ArrayVec;
+use cache_padded::CachePadded;
+use crossbeam_epoch::{self as epoch, Atomic, Guard, Owned, Shared};
+use dashmap::DashMap;
 use once_cell::sync::Lazy;
-use tracing::{debug, warn, error};
+use parking_lot::RwLock;
+use smallvec::SmallVec;
+use std::mem::{ManuallyDrop, MaybeUninit};
+use std::ptr::{null_mut, NonNull};
+use std::sync::atomic::{AtomicPtr, AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
+use tracing::{debug, error, warn};
+use uuid::Uuid;
 
 /// High-performance lock-free session registry for concurrent client management
 pub struct LockFreeSessionRegistry<T> {
@@ -87,13 +87,18 @@ impl<T> LockFreeSessionRegistry<T> {
         // Update peak session tracking
         let current_peak = self.stats.peak_concurrent_sessions.load(Ordering::Relaxed);
         if new_count > current_peak {
-            self.stats.peak_concurrent_sessions.store(new_count, Ordering::Relaxed);
+            self.stats
+                .peak_concurrent_sessions
+                .store(new_count, Ordering::Relaxed);
         }
 
         // Add to lock-free linked list for iteration
         self.add_to_active_list(session_id, session);
 
-        debug!("Session {} inserted, total sessions: {}", session_id, new_count);
+        debug!(
+            "Session {} inserted, total sessions: {}",
+            session_id, new_count
+        );
         Ok(())
     }
 
@@ -106,13 +111,19 @@ impl<T> LockFreeSessionRegistry<T> {
 
         if removed.is_some() {
             // Update atomic counters
-            let new_count = self.session_count.fetch_sub(1, Ordering::Relaxed).saturating_sub(1);
+            let new_count = self
+                .session_count
+                .fetch_sub(1, Ordering::Relaxed)
+                .saturating_sub(1);
             self.stats.total_removals.fetch_add(1, Ordering::Relaxed);
 
             // Remove from active list (lock-free)
             self.remove_from_active_list(session_id);
 
-            debug!("Session {} removed, total sessions: {}", session_id, new_count);
+            debug!(
+                "Session {} removed, total sessions: {}",
+                session_id, new_count
+            );
         }
 
         removed
@@ -124,13 +135,18 @@ impl<T> LockFreeSessionRegistry<T> {
 
         self.stats.lookup_operations.fetch_add(1, Ordering::Relaxed);
 
-        let result = self.sessions.get(session_id).map(|entry| entry.value().clone());
+        let result = self
+            .sessions
+            .get(session_id)
+            .map(|entry| entry.value().clone());
 
         // Update average lookup time
         let lookup_time_ns = start_time.elapsed().as_nanos() as u64;
         let current_avg = self.stats.average_lookup_time_ns.load(Ordering::Relaxed);
         let new_avg = (current_avg + lookup_time_ns) / 2;
-        self.stats.average_lookup_time_ns.store(new_avg, Ordering::Relaxed);
+        self.stats
+            .average_lookup_time_ns
+            .store(new_avg, Ordering::Relaxed);
 
         result
     }
@@ -198,9 +214,15 @@ impl<T> LockFreeSessionRegistry<T> {
             total_insertions: AtomicU64::new(self.stats.total_insertions.load(Ordering::Relaxed)),
             total_removals: AtomicU64::new(self.stats.total_removals.load(Ordering::Relaxed)),
             lookup_operations: AtomicU64::new(self.stats.lookup_operations.load(Ordering::Relaxed)),
-            average_lookup_time_ns: AtomicU64::new(self.stats.average_lookup_time_ns.load(Ordering::Relaxed)),
-            concurrent_operations: AtomicU64::new(self.stats.concurrent_operations.load(Ordering::Relaxed)),
-            peak_concurrent_sessions: AtomicUsize::new(self.stats.peak_concurrent_sessions.load(Ordering::Relaxed)),
+            average_lookup_time_ns: AtomicU64::new(
+                self.stats.average_lookup_time_ns.load(Ordering::Relaxed),
+            ),
+            concurrent_operations: AtomicU64::new(
+                self.stats.concurrent_operations.load(Ordering::Relaxed),
+            ),
+            peak_concurrent_sessions: AtomicUsize::new(
+                self.stats.peak_concurrent_sessions.load(Ordering::Relaxed),
+            ),
         }
     }
 }
@@ -242,9 +264,7 @@ impl<T> LockFreeRingBuffer<T> {
         // Ensure capacity is power of 2 for efficient modulo operations
         let capacity = capacity.next_power_of_two();
 
-        let buffer: Vec<AtomicPtr<T>> = (0..capacity)
-            .map(|_| AtomicPtr::new(null_mut()))
-            .collect();
+        let buffer: Vec<AtomicPtr<T>> = (0..capacity).map(|_| AtomicPtr::new(null_mut())).collect();
 
         Self {
             buffer: buffer.into(),
@@ -265,8 +285,12 @@ impl<T> LockFreeRingBuffer<T> {
         // Check if buffer is full
         let next_write = (write_pos + 1) & (self.capacity - 1);
         if next_write == read_pos {
-            self.stats.buffer_full_events.fetch_add(1, Ordering::Relaxed);
-            unsafe { drop(Box::from_raw(boxed_item)); }
+            self.stats
+                .buffer_full_events
+                .fetch_add(1, Ordering::Relaxed);
+            unsafe {
+                drop(Box::from_raw(boxed_item));
+            }
             return Err(RingBufferError::BufferFull);
         }
 
@@ -287,7 +311,9 @@ impl<T> LockFreeRingBuffer<T> {
 
         let current_peak = self.stats.peak_utilization.load(Ordering::Relaxed);
         if utilization > current_peak {
-            self.stats.peak_utilization.store(utilization, Ordering::Relaxed);
+            self.stats
+                .peak_utilization
+                .store(utilization, Ordering::Relaxed);
         }
 
         Ok(())
@@ -300,7 +326,9 @@ impl<T> LockFreeRingBuffer<T> {
 
         // Check if buffer is empty
         if read_pos == write_pos {
-            self.stats.buffer_empty_events.fetch_add(1, Ordering::Relaxed);
+            self.stats
+                .buffer_empty_events
+                .fetch_add(1, Ordering::Relaxed);
             return Err(RingBufferError::BufferEmpty);
         }
 
@@ -360,8 +388,12 @@ impl<T> LockFreeRingBuffer<T> {
         RingBufferStats {
             messages_sent: AtomicU64::new(self.stats.messages_sent.load(Ordering::Relaxed)),
             messages_received: AtomicU64::new(self.stats.messages_received.load(Ordering::Relaxed)),
-            buffer_full_events: AtomicU64::new(self.stats.buffer_full_events.load(Ordering::Relaxed)),
-            buffer_empty_events: AtomicU64::new(self.stats.buffer_empty_events.load(Ordering::Relaxed)),
+            buffer_full_events: AtomicU64::new(
+                self.stats.buffer_full_events.load(Ordering::Relaxed),
+            ),
+            buffer_empty_events: AtomicU64::new(
+                self.stats.buffer_empty_events.load(Ordering::Relaxed),
+            ),
             peak_utilization: AtomicUsize::new(self.stats.peak_utilization.load(Ordering::Relaxed)),
         }
     }
@@ -561,8 +593,8 @@ impl<T> Drop for PooledItem<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
     use std::sync::Arc;
+    use std::thread;
     use uuid::Uuid;
 
     #[test]
@@ -685,8 +717,14 @@ mod tests {
         assert_eq!(received.len(), num_messages);
 
         let stats = buffer.get_stats();
-        assert_eq!(stats.messages_sent.load(Ordering::Relaxed), num_messages as u64);
-        assert_eq!(stats.messages_received.load(Ordering::Relaxed), num_messages as u64);
+        assert_eq!(
+            stats.messages_sent.load(Ordering::Relaxed),
+            num_messages as u64
+        );
+        assert_eq!(
+            stats.messages_received.load(Ordering::Relaxed),
+            num_messages as u64
+        );
     }
 
     #[test]

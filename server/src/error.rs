@@ -46,7 +46,10 @@ pub enum DpstreamError {
     MemoryAllocation { size: usize },
 
     #[error("Service unavailable: {service} - retry after {retry_after_ms}ms")]
-    ServiceUnavailable { service: String, retry_after_ms: u64 },
+    ServiceUnavailable {
+        service: String,
+        retry_after_ms: u64,
+    },
 }
 
 impl DpstreamError {
@@ -101,12 +104,13 @@ impl DpstreamError {
         match self {
             Self::HardwareFailure { .. } | Self::MemoryAllocation { .. } => ErrorSeverity::Critical,
             Self::Auth(_) | Self::Config(_) => ErrorSeverity::High,
-            Self::Network(_) | Self::Streaming(_) | Self::ServiceUnavailable { .. } => ErrorSeverity::Medium,
+            Self::Network(_) | Self::Streaming(_) | Self::ServiceUnavailable { .. } => {
+                ErrorSeverity::Medium
+            }
             Self::Input(_) | Self::Serialization(_) => ErrorSeverity::Low,
             _ => ErrorSeverity::Medium,
         }
     }
-
 }
 
 /// Error severity levels for monitoring and alerting
@@ -229,8 +233,8 @@ impl NetworkError {
             Self::Timeout { .. } => true,
             Self::Discovery(_) => true,
             Self::DnsResolution(_) => true,
-            Self::BindError(_) => false,  // Port conflicts typically require intervention
-            Self::Protocol(_) => false,   // Protocol errors usually indicate bugs
+            Self::BindError(_) => false, // Port conflicts typically require intervention
+            Self::Protocol(_) => false,  // Protocol errors usually indicate bugs
         }
     }
 }
@@ -282,7 +286,11 @@ pub enum InputError {
     CommandSendFailed { reason: String },
 
     #[error("Configuration error in {field} with value '{value}': {reason}")]
-    ConfigurationError { field: String, value: String, reason: String },
+    ConfigurationError {
+        field: String,
+        value: String,
+        reason: String,
+    },
 
     #[error("Calibration failed: {reason}")]
     CalibrationFailed { reason: String },
@@ -349,23 +357,23 @@ pub enum StreamingError {
 impl StreamingError {
     pub fn is_recoverable(&self) -> bool {
         match self {
-            Self::VideoEncodingFailed(_) => true,   // Can retry with different settings
-            Self::AudioEncodingFailed(_) => true,   // Can retry with different settings
-            Self::CaptureInitFailed(_) => false,    // Hardware/setup issue
+            Self::VideoEncodingFailed(_) => true, // Can retry with different settings
+            Self::AudioEncodingFailed(_) => true, // Can retry with different settings
+            Self::CaptureInitFailed(_) => false,  // Hardware/setup issue
             Self::InitializationFailed { .. } => false, // Setup/configuration issue
-            Self::StreamSetupFailed(_) => false,    // Configuration issue
+            Self::StreamSetupFailed(_) => false,  // Configuration issue
             Self::UnsupportedCodec { .. } => false, // Client compatibility issue
             Self::ClientDisconnected { .. } => false, // Client initiated
             Self::BandwidthExceeded { .. } => true, // Can reduce quality
-            Self::NoBuffersAvailable => true,       // Temporary resource issue
+            Self::NoBuffersAvailable => true,     // Temporary resource issue
             Self::HardwareAccelerationUnavailable { .. } => false, // Hardware limitation
             Self::FrameProcessingFailed { .. } => true, // Can retry
-            Self::PipelineError { .. } => false,     // Pipeline configuration issue
+            Self::PipelineError { .. } => false,  // Pipeline configuration issue
             Self::EncoderNotAvailable { .. } => false, // Hardware/driver issue
-            Self::InvalidPacket => true,             // Data corruption, can retry
+            Self::InvalidPacket => true,          // Data corruption, can retry
             Self::ConfigurationError { .. } => false, // Configuration issue
             Self::CaptureStartFailed { .. } => false, // Setup issue
-            Self::CaptureStopFailed { .. } => true,  // Can force stop
+            Self::CaptureStopFailed { .. } => true, // Can force stop
         }
     }
 }
@@ -420,31 +428,55 @@ impl DpstreamError {
     pub fn recovery_suggestions(&self) -> Vec<String> {
         match self {
             DpstreamError::Network(NetworkError::Timeout { .. }) => {
-                vec!["Retry the operation".to_string(), "Check network connectivity".to_string()]
+                vec![
+                    "Retry the operation".to_string(),
+                    "Check network connectivity".to_string(),
+                ]
             }
             DpstreamError::Network(NetworkError::Discovery(_)) => {
                 vec!["Ensure Tailscale is running".to_string()]
             }
             DpstreamError::Emulator(EmulatorError::ExecutableNotFound { .. }) => {
-                vec!["Install Dolphin Emulator".to_string(), "Check DOLPHIN_PATH configuration".to_string()]
+                vec![
+                    "Install Dolphin Emulator".to_string(),
+                    "Check DOLPHIN_PATH configuration".to_string(),
+                ]
             }
             DpstreamError::Vpn(VpnError::AuthFailed(_)) => {
-                vec!["Check Tailscale authentication".to_string(), "Regenerate auth key".to_string()]
+                vec![
+                    "Check Tailscale authentication".to_string(),
+                    "Regenerate auth key".to_string(),
+                ]
             }
             DpstreamError::Input(_) => {
-                vec!["Check controller connection".to_string(), "Verify input configuration".to_string()]
+                vec![
+                    "Check controller connection".to_string(),
+                    "Verify input configuration".to_string(),
+                ]
             }
             DpstreamError::ResourceExhaustion { .. } => {
-                vec!["Free up system resources".to_string(), "Close unused applications".to_string()]
+                vec![
+                    "Free up system resources".to_string(),
+                    "Close unused applications".to_string(),
+                ]
             }
             DpstreamError::HardwareFailure { .. } => {
-                vec!["Check hardware connections".to_string(), "Contact system administrator".to_string()]
+                vec![
+                    "Check hardware connections".to_string(),
+                    "Contact system administrator".to_string(),
+                ]
             }
             DpstreamError::MemoryAllocation { .. } => {
-                vec!["Free system memory".to_string(), "Restart the application".to_string()]
+                vec![
+                    "Free system memory".to_string(),
+                    "Restart the application".to_string(),
+                ]
             }
             DpstreamError::ServiceUnavailable { .. } => {
-                vec!["Wait for service to become available".to_string(), "Check service status".to_string()]
+                vec![
+                    "Wait for service to become available".to_string(),
+                    "Check service status".to_string(),
+                ]
             }
             _ => vec!["Check logs for more details".to_string()],
         }
@@ -481,7 +513,6 @@ impl DpstreamError {
         }
     }
 }
-
 
 /// Macro for easy error creation with context
 #[macro_export]

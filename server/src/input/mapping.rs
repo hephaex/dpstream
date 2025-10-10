@@ -2,13 +2,13 @@
 //!
 //! Provides flexible mapping between Switch controllers and GameCube/Wii controllers
 
-use crate::error::{Result, InputError};
+use crate::error::{InputError, Result};
 use crate::input::processor::DolphinButton;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
 /// Controller mapping configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,34 +179,32 @@ impl ControllerMapping {
 
     /// Save mapping to file
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| InputError::ConfigurationError {
+        let json =
+            serde_json::to_string_pretty(self).map_err(|e| InputError::ConfigurationError {
                 field: "mapping".to_string(),
                 value: "json".to_string(),
                 reason: e.to_string(),
             })?;
 
-        fs::write(path, json)
-            .map_err(|e| InputError::ConfigurationError {
-                field: "file".to_string(),
-                value: "write".to_string(),
-                reason: e.to_string(),
-            })?;
+        fs::write(path, json).map_err(|e| InputError::ConfigurationError {
+            field: "file".to_string(),
+            value: "write".to_string(),
+            reason: e.to_string(),
+        })?;
 
         Ok(())
     }
 
     /// Load mapping from file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| InputError::ConfigurationError {
-                field: "file".to_string(),
-                value: "read".to_string(),
-                reason: e.to_string(),
-            })?;
+        let content = fs::read_to_string(path).map_err(|e| InputError::ConfigurationError {
+            field: "file".to_string(),
+            value: "read".to_string(),
+            reason: e.to_string(),
+        })?;
 
-        let mapping: ControllerMapping = serde_json::from_str(&content)
-            .map_err(|e| InputError::ConfigurationError {
+        let mapping: ControllerMapping =
+            serde_json::from_str(&content).map_err(|e| InputError::ConfigurationError {
                 field: "mapping".to_string(),
                 value: "json".to_string(),
                 reason: e.to_string(),
@@ -279,8 +277,8 @@ impl GameProfile {
 
     /// Save profile to file
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let json = serde_json::to_string_pretty(self)
-            .map_err(|e| InputError::ConfigurationError {
+        let json =
+            serde_json::to_string_pretty(self).map_err(|e| InputError::ConfigurationError {
                 field: "profile".to_string(),
                 value: "json".to_string(),
                 reason: e.to_string(),
@@ -288,35 +286,32 @@ impl GameProfile {
 
         // Ensure profiles directory exists
         if let Some(parent) = path.as_ref().parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| InputError::ConfigurationError {
-                    field: "directory".to_string(),
-                    value: "create".to_string(),
-                    reason: e.to_string(),
-                })?;
-        }
-
-        fs::write(path, json)
-            .map_err(|e| InputError::ConfigurationError {
-                field: "file".to_string(),
-                value: "write".to_string(),
+            fs::create_dir_all(parent).map_err(|e| InputError::ConfigurationError {
+                field: "directory".to_string(),
+                value: "create".to_string(),
                 reason: e.to_string(),
             })?;
+        }
+
+        fs::write(path, json).map_err(|e| InputError::ConfigurationError {
+            field: "file".to_string(),
+            value: "write".to_string(),
+            reason: e.to_string(),
+        })?;
 
         Ok(())
     }
 
     /// Load profile from file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| InputError::ConfigurationError {
-                field: "file".to_string(),
-                value: "read".to_string(),
-                reason: e.to_string(),
-            })?;
+        let content = fs::read_to_string(path).map_err(|e| InputError::ConfigurationError {
+            field: "file".to_string(),
+            value: "read".to_string(),
+            reason: e.to_string(),
+        })?;
 
-        let profile: GameProfile = serde_json::from_str(&content)
-            .map_err(|e| InputError::ConfigurationError {
+        let profile: GameProfile =
+            serde_json::from_str(&content).map_err(|e| InputError::ConfigurationError {
                 field: "profile".to_string(),
                 value: "json".to_string(),
                 reason: e.to_string(),

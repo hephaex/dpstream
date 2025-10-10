@@ -1,8 +1,8 @@
 // mDNS/UPnP service discovery using modern service discovery protocols
+use crate::error::{NetworkError, Result};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tracing::{info, warn, error, debug};
-use crate::error::{Result, NetworkError};
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerInfo {
@@ -39,7 +39,10 @@ impl DiscoveryService {
             ],
         };
 
-        info!("Initializing discovery service for {}", server_info.hostname);
+        info!(
+            "Initializing discovery service for {}",
+            server_info.hostname
+        );
         debug!("Server capabilities: {:?}", server_info.capabilities);
 
         Ok(Self {
@@ -79,9 +82,8 @@ impl DiscoveryService {
     async fn start_mdns_advertising(&mut self) -> Result<()> {
         use mdns_sd::{ServiceDaemon, ServiceInfo};
 
-        let daemon = ServiceDaemon::new().map_err(|e| {
-            NetworkError::Discovery(format!("Failed to create mDNS daemon: {}", e))
-        })?;
+        let daemon = ServiceDaemon::new()
+            .map_err(|e| NetworkError::Discovery(format!("Failed to create mDNS daemon: {}", e)))?;
 
         let service_type = "_nvstream._tcp.local.";
         let instance_name = format!("{}._nvstream._tcp.local.", self.server_info.hostname);
@@ -89,7 +91,10 @@ impl DiscoveryService {
         let properties = vec![
             ("hostname".to_string(), self.server_info.hostname.clone()),
             ("version".to_string(), self.server_info.version.clone()),
-            ("capabilities".to_string(), self.server_info.capabilities.join(",")),
+            (
+                "capabilities".to_string(),
+                self.server_info.capabilities.join(","),
+            ),
             ("GfeVersion".to_string(), "3.20.4.14".to_string()), // GameStream compatibility
             ("mac".to_string(), "00:11:22:33:44:55".to_string()), // Placeholder MAC
         ];
@@ -101,13 +106,12 @@ impl DiscoveryService {
             &self.server_info.ip,
             self.server_info.port,
             &properties,
-        ).map_err(|e| {
-            NetworkError::Discovery(format!("Failed to create service info: {}", e))
-        })?;
+        )
+        .map_err(|e| NetworkError::Discovery(format!("Failed to create service info: {}", e)))?;
 
-        daemon.register(service_info).map_err(|e| {
-            NetworkError::Discovery(format!("Failed to register service: {}", e))
-        })?;
+        daemon
+            .register(service_info)
+            .map_err(|e| NetworkError::Discovery(format!("Failed to register service: {}", e)))?;
 
         self.mdns_daemon = Some(daemon);
         info!("mDNS service registered: {}", instance_name);
@@ -119,12 +123,21 @@ impl DiscoveryService {
         info!("Simulating mDNS advertising for development");
         info!("Service would be advertised as:");
         info!("  Type: _nvstream._tcp.local.");
-        info!("  Instance: {}._nvstream._tcp.local.", self.server_info.hostname);
-        info!("  Address: {}:{}", self.server_info.ip, self.server_info.port);
+        info!(
+            "  Instance: {}._nvstream._tcp.local.",
+            self.server_info.hostname
+        );
+        info!(
+            "  Address: {}:{}",
+            self.server_info.ip, self.server_info.port
+        );
         info!("  Properties:");
         info!("    hostname: {}", self.server_info.hostname);
         info!("    version: {}", self.server_info.version);
-        info!("    capabilities: {}", self.server_info.capabilities.join(","));
+        info!(
+            "    capabilities: {}",
+            self.server_info.capabilities.join(",")
+        );
 
         // Simulate some delay
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -162,7 +175,10 @@ impl DiscoveryService {
     }
 
     pub async fn discover_servers(timeout: Duration) -> Result<Vec<ServerInfo>> {
-        info!("Discovering dpstream servers on network (timeout: {:?})", timeout);
+        info!(
+            "Discovering dpstream servers on network (timeout: {:?})",
+            timeout
+        );
 
         #[cfg(feature = "discovery")]
         {
@@ -179,8 +195,8 @@ impl DiscoveryService {
     #[cfg(feature = "discovery")]
     async fn discover_mdns_servers(timeout: Duration) -> Result<Vec<ServerInfo>> {
         use mdns_sd::{ServiceDaemon, ServiceEvent};
-        use tokio::time::timeout as async_timeout;
         use std::collections::HashMap;
+        use tokio::time::timeout as async_timeout;
 
         let daemon = ServiceDaemon::new().map_err(|e| {
             NetworkError::Discovery(format!("Failed to create discovery daemon: {}", e))
@@ -201,16 +217,22 @@ impl DiscoveryService {
                 match event {
                     ServiceEvent::ServiceResolved(service) => {
                         discovered_count += 1;
-                        debug!("Discovered service #{}: {}", discovered_count, service.get_fullname());
+                        debug!(
+                            "Discovered service #{}: {}",
+                            discovered_count,
+                            service.get_fullname()
+                        );
 
                         let properties = service.get_properties();
-                        let hostname = properties.get("hostname")
+                        let hostname = properties
+                            .get("hostname")
                             .unwrap_or(&service.get_hostname().to_string())
                             .clone();
 
                         // Get all IP addresses and prefer IPv4
                         let addresses: Vec<_> = service.get_addresses().iter().collect();
-                        let ip = addresses.iter()
+                        let ip = addresses
+                            .iter()
                             .find(|addr| addr.is_ipv4())
                             .or_else(|| addresses.first())
                             .map(|addr| addr.to_string())
@@ -220,20 +242,28 @@ impl DiscoveryService {
                             hostname: hostname.clone(),
                             ip,
                             port: service.get_port(),
-                            version: properties.get("version")
+                            version: properties
+                                .get("version")
                                 .unwrap_or(&"unknown".to_string())
                                 .clone(),
-                            capabilities: properties.get("capabilities")
-                                .map(|caps| caps.split(',')
-                                    .map(|s| s.trim().to_string())
-                                    .filter(|s| !s.is_empty())
-                                    .collect())
+                            capabilities: properties
+                                .get("capabilities")
+                                .map(|caps| {
+                                    caps.split(',')
+                                        .map(|s| s.trim().to_string())
+                                        .filter(|s| !s.is_empty())
+                                        .collect()
+                                })
                                 .unwrap_or_default(),
                         };
 
-                        info!("Found server: {} at {}:{} (capabilities: {:?})",
-                              server_info.hostname, server_info.ip, server_info.port,
-                              server_info.capabilities);
+                        info!(
+                            "Found server: {} at {}:{} (capabilities: {:?})",
+                            server_info.hostname,
+                            server_info.ip,
+                            server_info.port,
+                            server_info.capabilities
+                        );
 
                         // Use hostname as key to deduplicate
                         servers.insert(hostname, server_info);
@@ -263,7 +293,9 @@ impl DiscoveryService {
                     }
                 }
             }
-        }).await {
+        })
+        .await
+        {
             Ok(_) => {
                 debug!("Discovery completed normally");
             }
@@ -273,8 +305,11 @@ impl DiscoveryService {
         }
 
         let server_list: Vec<ServerInfo> = servers.into_values().collect();
-        info!("Discovery completed, found {} unique servers from {} total discoveries",
-              server_list.len(), discovered_count);
+        info!(
+            "Discovery completed, found {} unique servers from {} total discoveries",
+            server_list.len(),
+            discovered_count
+        );
 
         Ok(server_list)
     }

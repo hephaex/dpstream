@@ -15,17 +15,17 @@ use alloc::string::String;
 use core::panic::PanicInfo;
 use linked_list_allocator::LockedHeap;
 
-mod error;
-mod moonlight;
-mod input;
 mod display;
-mod sys;
+mod error;
+mod input;
+mod moonlight;
 mod network;
+mod sys;
 
-use error::{Result, ClientError};
-use moonlight::MoonlightClient;
-use input::InputManager;
 use display::DisplayManager;
+use error::{ClientError, Result};
+use input::InputManager;
+use moonlight::MoonlightClient;
 use sys::libnx::LibnxSystem;
 
 /// Global allocator for heap memory management
@@ -201,8 +201,8 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
 
 /// Initialize heap allocator
 fn init_heap() {
-    use linked_list_allocator::LockedHeap;
     use core::mem::MaybeUninit;
+    use linked_list_allocator::LockedHeap;
 
     // Allocate 16MB heap (adjust based on available memory)
     const HEAP_SIZE: usize = 16 * 1024 * 1024;

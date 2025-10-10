@@ -3,18 +3,18 @@
 //! Implements custom allocators, memory pools, and allocation patterns
 //! optimized for high-performance streaming with minimal GC pressure.
 
-use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicPtr, AtomicUsize, AtomicU64, Ordering};
-use std::sync::Arc;
-use std::ptr::{self, NonNull};
-use std::mem::{self, MaybeUninit, ManuallyDrop};
-use cache_padded::CachePadded;
-use bumpalo::Bump;
-use parking_lot::{Mutex, RwLock};
-use smallvec::{SmallVec, smallvec};
 use arrayvec::ArrayVec;
+use bumpalo::Bump;
+use cache_padded::CachePadded;
+use parking_lot::{Mutex, RwLock};
 use slab::Slab;
-use tracing::{debug, warn, error, info};
+use smallvec::{smallvec, SmallVec};
+use std::alloc::{GlobalAlloc, Layout, System};
+use std::mem::{self, ManuallyDrop, MaybeUninit};
+use std::ptr::{self, NonNull};
+use std::sync::atomic::{AtomicPtr, AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
+use tracing::{debug, error, info, warn};
 
 /// High-performance streaming allocator with optimized allocation patterns
 pub struct StreamingAllocator {
@@ -78,7 +78,7 @@ pub struct VideoFrameSlot {
     frame_number: u64,
     /// Allocation tracking
     allocated_at: std::time::Instant,
-    in_use: AtomicUsize,  // 0 = free, 1 = allocated
+    in_use: AtomicUsize, // 0 = free, 1 = allocated
 }
 
 /// Pre-allocated audio buffer slot
@@ -171,8 +171,12 @@ impl StreamingAllocator {
             });
         }
 
-        info!("Streaming allocator initialized with {} frame slots, {} audio slots, {} packet slots",
-              frame_pool.len(), audio_pool.len(), packet_pool.len());
+        info!(
+            "Streaming allocator initialized with {} frame slots, {} audio slots, {} packet slots",
+            frame_pool.len(),
+            audio_pool.len(),
+            packet_pool.len()
+        );
 
         Self {
             frame_pool: Arc::new(Mutex::new(frame_pool)),
@@ -185,7 +189,11 @@ impl StreamingAllocator {
     }
 
     /// Allocate video frame with zero-copy optimization
-    pub fn allocate_video_frame(&self, width: u32, height: u32) -> Result<VideoFrameHandle, AllocationError> {
+    pub fn allocate_video_frame(
+        &self,
+        width: u32,
+        height: u32,
+    ) -> Result<VideoFrameHandle, AllocationError> {
         let start_time = std::time::Instant::now();
 
         let required_size = (width * height * 4) as usize; // RGBA
@@ -197,7 +205,11 @@ impl StreamingAllocator {
 
         // Find available slot
         for (key, slot) in pool.iter_mut() {
-            if slot.in_use.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+            if slot
+                .in_use
+                .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+            {
                 // Successfully claimed slot
                 slot.size.store(required_size, Ordering::Release);
                 slot.width = width;
@@ -210,9 +222,14 @@ impl StreamingAllocator {
 
                 self.stats.pool_hits.fetch_add(1, Ordering::Relaxed);
                 self.stats.total_allocations.fetch_add(1, Ordering::Relaxed);
-                self.stats.bytes_allocated.fetch_add(required_size as u64, Ordering::Relaxed);
+                self.stats
+                    .bytes_allocated
+                    .fetch_add(required_size as u64, Ordering::Relaxed);
 
-                debug!("Allocated video frame {}x{} from pool slot {}", width, height, key);
+                debug!(
+                    "Allocated video frame {}x{} from pool slot {}",
+                    width, height, key
+                );
 
                 return Ok(VideoFrameHandle {
                     slot_key: key,
@@ -228,7 +245,12 @@ impl StreamingAllocator {
     }
 
     /// Allocate audio buffer with low-latency optimization
-    pub fn allocate_audio_buffer(&self, sample_count: usize, sample_rate: u32, channels: u16) -> Result<AudioBufferHandle, AllocationError> {
+    pub fn allocate_audio_buffer(
+        &self,
+        sample_count: usize,
+        sample_rate: u32,
+        channels: u16,
+    ) -> Result<AudioBufferHandle, AllocationError> {
         let start_time = std::time::Instant::now();
 
         if sample_count > 48000 * 2 {
@@ -239,7 +261,11 @@ impl StreamingAllocator {
 
         // Find available slot
         for (key, slot) in pool.iter_mut() {
-            if slot.in_use.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+            if slot
+                .in_use
+                .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+            {
                 slot.sample_count.store(sample_count, Ordering::Release);
                 slot.sample_rate = sample_rate;
                 slot.channels = channels;
@@ -251,9 +277,15 @@ impl StreamingAllocator {
 
                 self.stats.pool_hits.fetch_add(1, Ordering::Relaxed);
                 self.stats.total_allocations.fetch_add(1, Ordering::Relaxed);
-                self.stats.bytes_allocated.fetch_add((sample_count * mem::size_of::<f32>()) as u64, Ordering::Relaxed);
+                self.stats.bytes_allocated.fetch_add(
+                    (sample_count * mem::size_of::<f32>()) as u64,
+                    Ordering::Relaxed,
+                );
 
-                debug!("Allocated audio buffer {} samples from pool slot {}", sample_count, key);
+                debug!(
+                    "Allocated audio buffer {} samples from pool slot {}",
+                    sample_count, key
+                );
 
                 return Ok(AudioBufferHandle {
                     slot_key: key,
@@ -268,7 +300,11 @@ impl StreamingAllocator {
     }
 
     /// Allocate network packet with zero-copy networking
-    pub fn allocate_packet(&self, size: usize, packet_type: u16) -> Result<PacketHandle, AllocationError> {
+    pub fn allocate_packet(
+        &self,
+        size: usize,
+        packet_type: u16,
+    ) -> Result<PacketHandle, AllocationError> {
         let start_time = std::time::Instant::now();
 
         if size > 9000 {
@@ -279,7 +315,11 @@ impl StreamingAllocator {
 
         // Find available slot
         for (key, slot) in pool.iter_mut() {
-            if slot.in_use.compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+            if slot
+                .in_use
+                .compare_exchange(0, 1, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+            {
                 slot.size.store(size, Ordering::Release);
                 slot.packet_type = packet_type;
                 slot.timestamp = std::time::SystemTime::now()
@@ -290,7 +330,9 @@ impl StreamingAllocator {
 
                 self.stats.pool_hits.fetch_add(1, Ordering::Relaxed);
                 self.stats.total_allocations.fetch_add(1, Ordering::Relaxed);
-                self.stats.bytes_allocated.fetch_add(size as u64, Ordering::Relaxed);
+                self.stats
+                    .bytes_allocated
+                    .fetch_add(size as u64, Ordering::Relaxed);
 
                 debug!("Allocated packet {} bytes from pool slot {}", size, key);
 
@@ -312,7 +354,9 @@ impl StreamingAllocator {
         let allocated = arena.alloc(value);
 
         self.stats.arena_allocations.fetch_add(1, Ordering::Relaxed);
-        self.stats.bytes_allocated.fetch_add(mem::size_of::<T>() as u64, Ordering::Relaxed);
+        self.stats
+            .bytes_allocated
+            .fetch_add(mem::size_of::<T>() as u64, Ordering::Relaxed);
 
         ArenaHandle {
             ptr: allocated as *const T,
@@ -326,8 +370,13 @@ impl StreamingAllocator {
         let bytes_deallocated = arena.allocated_bytes();
         arena.reset();
 
-        self.stats.bytes_deallocated.fetch_add(bytes_deallocated as u64, Ordering::Relaxed);
-        debug!("Reset temporary arena, deallocated {} bytes", bytes_deallocated);
+        self.stats
+            .bytes_deallocated
+            .fetch_add(bytes_deallocated as u64, Ordering::Relaxed);
+        debug!(
+            "Reset temporary arena, deallocated {} bytes",
+            bytes_deallocated
+        );
     }
 
     /// Release video frame back to pool
@@ -337,8 +386,12 @@ impl StreamingAllocator {
             let size = slot.size.load(Ordering::Acquire);
             slot.in_use.store(0, Ordering::Release);
 
-            self.stats.total_deallocations.fetch_add(1, Ordering::Relaxed);
-            self.stats.bytes_deallocated.fetch_add(size as u64, Ordering::Relaxed);
+            self.stats
+                .total_deallocations
+                .fetch_add(1, Ordering::Relaxed);
+            self.stats
+                .bytes_deallocated
+                .fetch_add(size as u64, Ordering::Relaxed);
 
             debug!("Released video frame from pool slot {}", slot_key);
         }
@@ -351,8 +404,13 @@ impl StreamingAllocator {
             let sample_count = slot.sample_count.load(Ordering::Acquire);
             slot.in_use.store(0, Ordering::Release);
 
-            self.stats.total_deallocations.fetch_add(1, Ordering::Relaxed);
-            self.stats.bytes_deallocated.fetch_add((sample_count * mem::size_of::<f32>()) as u64, Ordering::Relaxed);
+            self.stats
+                .total_deallocations
+                .fetch_add(1, Ordering::Relaxed);
+            self.stats.bytes_deallocated.fetch_add(
+                (sample_count * mem::size_of::<f32>()) as u64,
+                Ordering::Relaxed,
+            );
 
             debug!("Released audio buffer from pool slot {}", slot_key);
         }
@@ -365,8 +423,12 @@ impl StreamingAllocator {
             let size = slot.size.load(Ordering::Acquire);
             slot.in_use.store(0, Ordering::Release);
 
-            self.stats.total_deallocations.fetch_add(1, Ordering::Relaxed);
-            self.stats.bytes_deallocated.fetch_add(size as u64, Ordering::Relaxed);
+            self.stats
+                .total_deallocations
+                .fetch_add(1, Ordering::Relaxed);
+            self.stats
+                .bytes_deallocated
+                .fetch_add(size as u64, Ordering::Relaxed);
 
             debug!("Released packet from pool slot {}", slot_key);
         }
@@ -378,7 +440,9 @@ impl StreamingAllocator {
         let peak_usage = self.stats.peak_memory_usage.load(Ordering::Relaxed);
 
         if current_usage > peak_usage {
-            self.stats.peak_memory_usage.store(current_usage, Ordering::Relaxed);
+            self.stats
+                .peak_memory_usage
+                .store(current_usage, Ordering::Relaxed);
         }
 
         MemoryUsageStats {
@@ -435,12 +499,7 @@ impl<'a> VideoFrameHandle<'a> {
         let slot = &pool[self.slot_key];
         let size = slot.size.load(Ordering::Acquire);
 
-        unsafe {
-            std::slice::from_raw_parts_mut(
-                slot.data.as_ptr() as *mut u8,
-                size
-            )
-        }
+        unsafe { std::slice::from_raw_parts_mut(slot.data.as_ptr() as *mut u8, size) }
     }
 
     /// Get read-only access to frame data
@@ -449,12 +508,7 @@ impl<'a> VideoFrameHandle<'a> {
         let slot = &pool[self.slot_key];
         let size = slot.size.load(Ordering::Acquire);
 
-        unsafe {
-            std::slice::from_raw_parts(
-                slot.data.as_ptr() as *const u8,
-                size
-            )
-        }
+        unsafe { std::slice::from_raw_parts(slot.data.as_ptr() as *const u8, size) }
     }
 
     /// Get frame metadata
@@ -487,12 +541,7 @@ impl<'a> AudioBufferHandle<'a> {
         let slot = &pool[self.slot_key];
         let sample_count = slot.sample_count.load(Ordering::Acquire);
 
-        unsafe {
-            std::slice::from_raw_parts_mut(
-                slot.data.as_ptr() as *mut f32,
-                sample_count
-            )
-        }
+        unsafe { std::slice::from_raw_parts_mut(slot.data.as_ptr() as *mut f32, sample_count) }
     }
 
     /// Get read-only access to audio samples
@@ -501,12 +550,7 @@ impl<'a> AudioBufferHandle<'a> {
         let slot = &pool[self.slot_key];
         let sample_count = slot.sample_count.load(Ordering::Acquire);
 
-        unsafe {
-            std::slice::from_raw_parts(
-                slot.data.as_ptr() as *const f32,
-                sample_count
-            )
-        }
+        unsafe { std::slice::from_raw_parts(slot.data.as_ptr() as *const f32, sample_count) }
     }
 
     /// Get audio metadata
@@ -539,12 +583,7 @@ impl<'a> PacketHandle<'a> {
         let slot = &pool[self.slot_key];
         let size = slot.size.load(Ordering::Acquire);
 
-        unsafe {
-            std::slice::from_raw_parts_mut(
-                slot.data.as_ptr() as *mut u8,
-                size
-            )
-        }
+        unsafe { std::slice::from_raw_parts_mut(slot.data.as_ptr() as *mut u8, size) }
     }
 
     /// Get read-only access to packet data
@@ -553,12 +592,7 @@ impl<'a> PacketHandle<'a> {
         let slot = &pool[self.slot_key];
         let size = slot.size.load(Ordering::Acquire);
 
-        unsafe {
-            std::slice::from_raw_parts(
-                slot.data.as_ptr() as *const u8,
-                size
-            )
-        }
+        unsafe { std::slice::from_raw_parts(slot.data.as_ptr() as *const u8, size) }
     }
 
     /// Get packet metadata
@@ -631,8 +665,8 @@ pub static STREAMING_ALLOCATOR: once_cell::sync::Lazy<StreamingAllocator> =
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
     use std::sync::Arc;
+    use std::thread;
 
     #[test]
     fn test_video_frame_allocation() {

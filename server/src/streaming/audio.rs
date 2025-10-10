@@ -3,14 +3,14 @@
 //! Implements PulseAudio-based audio capture with hardware acceleration support
 
 use crate::error::{Result, StreamingError};
-use crate::streaming::moonlight::{AudioFrame, AudioCodec};
+use crate::streaming::moonlight::{AudioCodec, AudioFrame};
+use crossbeam_channel::{bounded, Receiver, Sender};
+use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use tokio::time::sleep;
-use parking_lot::Mutex;
-use crossbeam_channel::{Receiver, Sender, bounded};
 
 /// Audio capture configuration
 #[derive(Debug, Clone)]
@@ -30,16 +30,16 @@ pub struct AudioConfig {
 impl Default for AudioConfig {
     fn default() -> Self {
         Self {
-            sample_rate: 48000,  // 48kHz for gaming audio
-            channels: 2,         // Stereo
-            bit_depth: 16,       // 16-bit samples
+            sample_rate: 48000, // 48kHz for gaming audio
+            channels: 2,        // Stereo
+            bit_depth: 16,      // 16-bit samples
             codec: AudioCodec::Opus,
-            bitrate: 128000,     // 128 kbps
-            buffer_size: 1024,   // 1024 samples per buffer
+            bitrate: 128000,   // 128 kbps
+            buffer_size: 1024, // 1024 samples per buffer
             enable_hardware_acceleration: true,
             low_latency_mode: true,
-            noise_suppression: false,  // Disable for gaming
-            echo_cancellation: false,  // Disable for gaming
+            noise_suppression: false, // Disable for gaming
+            echo_cancellation: false, // Disable for gaming
         }
     }
 }
@@ -138,10 +138,11 @@ impl AudioCapture {
         #[cfg(feature = "streaming")]
         {
             if let Some(ref pipeline) = self.pipeline {
-                pipeline.set_state(gst::State::Playing)
-                    .map_err(|e| StreamingError::CaptureStartFailed {
+                pipeline.set_state(gst::State::Playing).map_err(|e| {
+                    StreamingError::CaptureStartFailed {
                         reason: e.to_string(),
-                    })?;
+                    }
+                })?;
             }
         }
 
@@ -170,10 +171,11 @@ impl AudioCapture {
         #[cfg(feature = "streaming")]
         {
             if let Some(ref pipeline) = self.pipeline {
-                pipeline.set_state(gst::State::Null)
-                    .map_err(|e| StreamingError::CaptureStopFailed {
+                pipeline.set_state(gst::State::Null).map_err(|e| {
+                    StreamingError::CaptureStopFailed {
                         reason: e.to_string(),
-                    })?;
+                    }
+                })?;
             }
         }
 
@@ -203,7 +205,7 @@ impl AudioCapture {
         // Audio source - use PulseAudio
         let source = gst::ElementFactory::make("pulsesrc")
             .name("audio-source")
-            .property("device", "dolphin-emu.monitor")  // Capture Dolphin audio
+            .property("device", "dolphin-emu.monitor") // Capture Dolphin audio
             .build()
             .map_err(|e| StreamingError::InitializationFailed {
                 component: "PulseAudio source".to_string(),
@@ -257,19 +259,21 @@ impl AudioCapture {
         appsink.set_property("emit-signals", true);
         appsink.set_property("sync", false);
         appsink.set_property("async", false);
-        appsink.set_property("max-buffers", 3u32);  // Small buffer for low latency
+        appsink.set_property("max-buffers", 3u32); // Small buffer for low latency
 
         // Add elements to pipeline
-        pipeline.add_many(&[
-            &source,
-            &audioconvert,
-            &audioresample,
-            &caps_filter,
-            appsink.upcast_ref(),
-        ]).map_err(|e| StreamingError::InitializationFailed {
-            component: "Pipeline assembly".to_string(),
-            reason: e.to_string(),
-        })?;
+        pipeline
+            .add_many(&[
+                &source,
+                &audioconvert,
+                &audioresample,
+                &caps_filter,
+                appsink.upcast_ref(),
+            ])
+            .map_err(|e| StreamingError::InitializationFailed {
+                component: "Pipeline assembly".to_string(),
+                reason: e.to_string(),
+            })?;
 
         // Link elements
         gst::Element::link_many(&[
@@ -278,7 +282,8 @@ impl AudioCapture {
             &audioresample,
             &caps_filter,
             appsink.upcast_ref(),
-        ]).map_err(|e| StreamingError::InitializationFailed {
+        ])
+        .map_err(|e| StreamingError::InitializationFailed {
             component: "Pipeline linking".to_string(),
             reason: e.to_string(),
         })?;
@@ -339,7 +344,8 @@ impl AudioCapture {
 
                 // Add to queue
                 let mut queue = sample_queue.lock().await;
-                if queue.len() >= 32 {  // Prevent buffer overflow
+                if queue.len() >= 32 {
+                    // Prevent buffer overflow
                     queue.pop_front();
 
                     let mut stats = stats.lock().await;
@@ -531,7 +537,7 @@ mod tests {
         let encoder = AudioEncoder::new(config).await.unwrap();
 
         let sample = AudioSample {
-            data: vec![0u8; 1024],  // 1024 bytes of audio
+            data: vec![0u8; 1024], // 1024 bytes of audio
             timestamp: 1000,
             sample_rate: 48000,
             channels: 2,
@@ -543,7 +549,7 @@ mod tests {
 
         let frame = result.unwrap().unwrap();
         assert_eq!(frame.codec, AudioCodec::Opus);
-        assert_eq!(frame.data.len(), 128);  // Compressed to 1/8 size
+        assert_eq!(frame.data.len(), 128); // Compressed to 1/8 size
     }
 
     #[tokio::test]

@@ -3,21 +3,21 @@
 //! Implements comprehensive error handling with correlation tracking, circuit breakers,
 //! automatic recovery, and distributed tracing for enterprise-grade reliability.
 
-use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Weak};
-use std::sync::atomic::{AtomicU64, AtomicUsize, AtomicBool, Ordering};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use uuid::Uuid;
-use serde::{Serialize, Deserialize};
-use cache_padded::CachePadded;
-use parking_lot::{RwLock, Mutex};
-use dashmap::DashMap;
-use tokio::sync::{mpsc, oneshot, broadcast};
-use tokio::time::{sleep, timeout};
-use tracing::{debug, info, warn, error, span, Level, Instrument};
-use smallvec::{SmallVec, smallvec};
 use arrayvec::ArrayVec;
+use cache_padded::CachePadded;
+use dashmap::DashMap;
 use once_cell::sync::Lazy;
+use parking_lot::{Mutex, RwLock};
+use serde::{Deserialize, Serialize};
+use smallvec::{smallvec, SmallVec};
+use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Weak};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::time::{sleep, timeout};
+use tracing::{debug, error, info, span, warn, Instrument, Level};
+use uuid::Uuid;
 
 /// Enterprise-grade error recovery system with distributed correlation
 pub struct ErrorRecoverySystem {
@@ -208,7 +208,10 @@ impl Default for CircuitBreakerMetrics {
 /// Recovery strategy trait for pluggable recovery mechanisms
 pub trait RecoveryStrategy: Send + Sync {
     /// Attempt to recover from the given error
-    fn recover(&self, error: &ErrorContext) -> Box<dyn std::future::Future<Output = RecoveryResult> + Send + Unpin>;
+    fn recover(
+        &self,
+        error: &ErrorContext,
+    ) -> Box<dyn std::future::Future<Output = RecoveryResult> + Send + Unpin>;
 
     /// Check if this strategy can handle the given error type
     fn can_handle(&self, error_type: &ErrorType) -> bool;
@@ -246,10 +249,7 @@ pub enum RecoveryResult {
         retry_after: Duration,
     },
     /// Recovery failed permanently
-    PermanentFailure {
-        duration: Duration,
-        error: String,
-    },
+    PermanentFailure { duration: Duration, error: String },
     /// Recovery is still in progress
     InProgress {
         started_at: SystemTime,
@@ -411,7 +411,7 @@ impl Default for ErrorRecoveryConfig {
         Self {
             max_correlations: 1000,
             correlation_cleanup_interval: Duration::from_secs(300), // 5 minutes
-            correlation_retention: Duration::from_secs(3600), // 1 hour
+            correlation_retention: Duration::from_secs(3600),       // 1 hour
             max_recovery_attempts: 3,
             circuit_breaker_configs: HashMap::new(),
             enable_distributed_notifications: true,
@@ -507,8 +507,12 @@ impl ErrorRecoverySystem {
         self.correlations
             .entry(correlation_id.clone())
             .or_insert_with(|| {
-                self.metrics.correlation_count.fetch_add(1, Ordering::Relaxed);
-                self.metrics.active_correlations.fetch_add(1, Ordering::Relaxed);
+                self.metrics
+                    .correlation_count
+                    .fetch_add(1, Ordering::Relaxed);
+                self.metrics
+                    .active_correlations
+                    .fetch_add(1, Ordering::Relaxed);
 
                 ErrorCorrelation {
                     correlation_id: correlation_id.clone(),
@@ -531,10 +535,14 @@ impl ErrorRecoverySystem {
     fn assess_user_impact(&self, error: &ErrorContext) -> UserImpactLevel {
         match (&error.error_type, &error.severity) {
             (_, ErrorSeverity::Critical) => UserImpactLevel::Complete,
-            (ErrorType::VideoError | ErrorType::AudioError, ErrorSeverity::High) => UserImpactLevel::Severe,
+            (ErrorType::VideoError | ErrorType::AudioError, ErrorSeverity::High) => {
+                UserImpactLevel::Severe
+            }
             (ErrorType::NetworkError, ErrorSeverity::High) => UserImpactLevel::Severe,
             (_, ErrorSeverity::High) => UserImpactLevel::Moderate,
-            (ErrorType::VideoError | ErrorType::AudioError, ErrorSeverity::Medium) => UserImpactLevel::Moderate,
+            (ErrorType::VideoError | ErrorType::AudioError, ErrorSeverity::Medium) => {
+                UserImpactLevel::Moderate
+            }
             (_, ErrorSeverity::Medium) => UserImpactLevel::Minimal,
             _ => UserImpactLevel::None,
         }
@@ -573,36 +581,48 @@ impl ErrorRecoverySystem {
                     warn!("Failed to send recovery started event: {}", e);
                 }
 
-                self.metrics.recovery_attempts.fetch_add(1, Ordering::Relaxed);
+                self.metrics
+                    .recovery_attempts
+                    .fetch_add(1, Ordering::Relaxed);
 
                 // Execute recovery strategy with timeout
-                let recovery_result = match timeout(
-                    Duration::from_secs(30),
-                    strategy.recover(&error)
-                ).await {
-                    Ok(result) => result,
-                    Err(_) => RecoveryResult::RetryableFailure {
-                        duration: Duration::from_secs(30),
-                        error: "Recovery timeout".to_string(),
-                        retry_after: Duration::from_secs(60),
-                    },
-                };
+                let recovery_result =
+                    match timeout(Duration::from_secs(30), strategy.recover(&error)).await {
+                        Ok(result) => result,
+                        Err(_) => RecoveryResult::RetryableFailure {
+                            duration: Duration::from_secs(30),
+                            error: "Recovery timeout".to_string(),
+                            retry_after: Duration::from_secs(60),
+                        },
+                    };
 
                 // Update metrics
                 match &recovery_result {
                     RecoveryResult::Success { .. } => {
-                        self.metrics.successful_recoveries.fetch_add(1, Ordering::Relaxed);
+                        self.metrics
+                            .successful_recoveries
+                            .fetch_add(1, Ordering::Relaxed);
                         info!("Recovery successful using strategy: {}", strategy.name());
                         break; // Stop trying other strategies
                     }
                     RecoveryResult::PermanentFailure { .. } => {
-                        self.metrics.failed_recoveries.fetch_add(1, Ordering::Relaxed);
-                        error!("Recovery permanently failed using strategy: {}", strategy.name());
+                        self.metrics
+                            .failed_recoveries
+                            .fetch_add(1, Ordering::Relaxed);
+                        error!(
+                            "Recovery permanently failed using strategy: {}",
+                            strategy.name()
+                        );
                         break; // Stop trying other strategies
                     }
                     RecoveryResult::RetryableFailure { .. } => {
-                        self.metrics.failed_recoveries.fetch_add(1, Ordering::Relaxed);
-                        warn!("Recovery failed with strategy: {}, will try next strategy", strategy.name());
+                        self.metrics
+                            .failed_recoveries
+                            .fetch_add(1, Ordering::Relaxed);
+                        warn!(
+                            "Recovery failed with strategy: {}, will try next strategy",
+                            strategy.name()
+                        );
                         // Continue to next strategy
                     }
                     RecoveryResult::InProgress { .. } => {
@@ -631,7 +651,10 @@ impl ErrorRecoverySystem {
     }
 
     /// Get applicable recovery strategies for an error type
-    fn get_applicable_strategies(&self, error_type: &ErrorType) -> Vec<Arc<dyn RecoveryStrategy + Send + Sync>> {
+    fn get_applicable_strategies(
+        &self,
+        error_type: &ErrorType,
+    ) -> Vec<Arc<dyn RecoveryStrategy + Send + Sync>> {
         let strategies = self.recovery_strategies.read();
         let mut applicable: Vec<_> = strategies
             .values()
@@ -642,15 +665,21 @@ impl ErrorRecoverySystem {
         // Sort by priority (highest first)
         applicable.sort_by(|a, b| b.priority().cmp(&a.priority()));
 
-        applicable.into_iter().map(|s| s as Arc<dyn RecoveryStrategy + Send + Sync>).collect()
+        applicable
+            .into_iter()
+            .map(|s| s as Arc<dyn RecoveryStrategy + Send + Sync>)
+            .collect()
     }
 
     /// Update circuit breaker state
     async fn update_circuit_breaker(&self, component: &str, success: bool) {
-        let breaker = self.circuit_breakers
+        let breaker = self
+            .circuit_breakers
             .entry(component.to_string())
             .or_insert_with(|| {
-                let config = self.config.circuit_breaker_configs
+                let config = self
+                    .config
+                    .circuit_breaker_configs
                     .get(component)
                     .cloned()
                     .unwrap_or_default();
@@ -684,7 +713,8 @@ impl ErrorRecoverySystem {
 
     /// Update error type metrics
     fn update_error_type_metrics(&self, error_type: &ErrorType) {
-        self.metrics.errors_by_type
+        self.metrics
+            .errors_by_type
             .entry(error_type.clone())
             .or_insert_with(|| AtomicU64::new(0))
             .fetch_add(1, Ordering::Relaxed);
@@ -692,7 +722,8 @@ impl ErrorRecoverySystem {
 
     /// Update error severity metrics
     fn update_error_severity_metrics(&self, severity: &ErrorSeverity) {
-        self.metrics.errors_by_severity
+        self.metrics
+            .errors_by_severity
             .entry(severity.clone())
             .or_insert_with(|| AtomicU64::new(0))
             .fetch_add(1, Ordering::Relaxed);
@@ -722,9 +753,12 @@ impl ErrorRecoverySystem {
 
                 correlations.retain(|_, correlation| {
                     let should_retain = match correlation.status {
-                        CorrelationStatus::Resolved | CorrelationStatus::Failed | CorrelationStatus::Closed => {
+                        CorrelationStatus::Resolved
+                        | CorrelationStatus::Failed
+                        | CorrelationStatus::Closed => {
                             now.duration_since(correlation.last_updated)
-                                .unwrap_or(Duration::ZERO) < config.correlation_retention
+                                .unwrap_or(Duration::ZERO)
+                                < config.correlation_retention
                         }
                         _ => true,
                     };
@@ -794,7 +828,9 @@ impl CircuitBreaker {
     /// Record a successful operation
     pub async fn record_success(&self) {
         self.metrics.total_requests.fetch_add(1, Ordering::Relaxed);
-        self.metrics.successful_requests.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .successful_requests
+            .fetch_add(1, Ordering::Relaxed);
 
         let success_count = self.success_count.fetch_add(1, Ordering::Relaxed) + 1;
 
@@ -805,7 +841,9 @@ impl CircuitBreaker {
                     *state = CircuitBreakerState::Closed;
                     self.failure_count.store(0, Ordering::Relaxed);
                     self.success_count.store(0, Ordering::Relaxed);
-                    self.metrics.state_transitions.fetch_add(1, Ordering::Relaxed);
+                    self.metrics
+                        .state_transitions
+                        .fetch_add(1, Ordering::Relaxed);
                     info!("Circuit breaker transitioned to Closed state");
                 }
             }
@@ -820,7 +858,9 @@ impl CircuitBreaker {
                 if now - last_failure >= self.config.recovery_timeout.as_secs() {
                     *state = CircuitBreakerState::HalfOpen;
                     self.success_count.store(1, Ordering::Relaxed);
-                    self.metrics.state_transitions.fetch_add(1, Ordering::Relaxed);
+                    self.metrics
+                        .state_transitions
+                        .fetch_add(1, Ordering::Relaxed);
                     info!("Circuit breaker transitioned to HalfOpen state");
                 }
             }
@@ -850,14 +890,18 @@ impl CircuitBreaker {
             CircuitBreakerState::Closed => {
                 if failure_count >= self.config.failure_threshold {
                     *state = CircuitBreakerState::Open;
-                    self.metrics.state_transitions.fetch_add(1, Ordering::Relaxed);
+                    self.metrics
+                        .state_transitions
+                        .fetch_add(1, Ordering::Relaxed);
                     warn!("Circuit breaker opened due to {} failures", failure_count);
                 }
             }
             CircuitBreakerState::HalfOpen => {
                 *state = CircuitBreakerState::Open;
                 self.success_count.store(0, Ordering::Relaxed);
-                self.metrics.state_transitions.fetch_add(1, Ordering::Relaxed);
+                self.metrics
+                    .state_transitions
+                    .fetch_add(1, Ordering::Relaxed);
                 warn!("Circuit breaker reopened due to failure in half-open state");
             }
             CircuitBreakerState::Open => {
@@ -898,9 +942,8 @@ pub struct ErrorRecoveryStats {
 }
 
 /// Global error recovery system instance
-pub static ERROR_RECOVERY: Lazy<ErrorRecoverySystem> = Lazy::new(|| {
-    ErrorRecoverySystem::new(ErrorRecoveryConfig::default())
-});
+pub static ERROR_RECOVERY: Lazy<ErrorRecoverySystem> =
+    Lazy::new(|| ErrorRecoverySystem::new(ErrorRecoveryConfig::default()));
 
 #[cfg(test)]
 mod tests {

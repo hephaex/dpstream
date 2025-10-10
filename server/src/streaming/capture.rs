@@ -3,12 +3,12 @@
 //! Implements GStreamer-based video capture from Dolphin window with hardware acceleration
 
 use crate::error::{Result, StreamingError};
-use std::sync::Arc;
+use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use parking_lot::{Mutex, RwLock};
-use crossbeam_channel::{Receiver, Sender, bounded, unbounded};
-use tokio::sync::oneshot;
-use tracing::{info, debug, error, warn};
 use std::collections::VecDeque;
+use std::sync::Arc;
+use tokio::sync::oneshot;
+use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "streaming")]
 use gstreamer as gst;
@@ -20,7 +20,7 @@ use gstreamer_video as gst_video;
 /// Video frame data with optimized memory management
 #[derive(Debug)]
 pub struct VideoFrame {
-    pub data: Arc<Vec<u8>>,  // Shared ownership for zero-copy
+    pub data: Arc<Vec<u8>>, // Shared ownership for zero-copy
     pub width: u32,
     pub height: u32,
     pub timestamp: u64,
@@ -47,7 +47,7 @@ pub enum FramePriority {
     Low = 0,
     Normal = 1,
     High = 2,
-    Critical = 3,  // Keyframes
+    Critical = 3, // Keyframes
 }
 
 /// High-performance video frame buffer pool
@@ -130,9 +130,9 @@ pub struct VideoCaptureConfig {
 
 #[derive(Debug, Clone, Copy)]
 pub enum VideoEncoder {
-    Software,  // x264
-    NVENC,     // NVIDIA hardware encoder
-    VAAPI,     // Intel/AMD hardware encoder
+    Software, // x264
+    NVENC,    // NVIDIA hardware encoder
+    VAAPI,    // Intel/AMD hardware encoder
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -178,9 +178,14 @@ pub struct CaptureStats {
 impl VideoCapture {
     /// Create a new video capture instance with optimized performance
     pub fn new(config: VideoCaptureConfig) -> Result<Self> {
-        info!("Initializing optimized video capture for window 0x{:x}", config.window_id);
-        debug!("Configuration: {}x{} @ {}fps, bitrate: {}kbps",
-               config.width, config.height, config.fps, config.bitrate);
+        info!(
+            "Initializing optimized video capture for window 0x{:x}",
+            config.window_id
+        );
+        debug!(
+            "Configuration: {}x{} @ {}fps, bitrate: {}kbps",
+            config.width, config.height, config.fps, config.bitrate
+        );
 
         // Initialize GStreamer if available
         #[cfg(feature = "streaming")]
@@ -196,8 +201,11 @@ impl VideoCapture {
         let max_buffers = ((config.fps as usize * 2).max(8)).min(32); // 2 seconds worth, 8-32 range
         let buffer_pool = Arc::new(VideoFramePool::new(frame_size, max_buffers));
 
-        info!("Created buffer pool: {} buffers of {} KB each",
-              max_buffers, frame_size / 1024);
+        info!(
+            "Created buffer pool: {} buffers of {} KB each",
+            max_buffers,
+            frame_size / 1024
+        );
 
         // Use high-performance bounded channel with backpressure
         let (frame_sender, frame_receiver) = bounded(max_buffers);
@@ -233,8 +241,10 @@ impl VideoCapture {
         }
 
         *self.is_capturing.write() = true;
-        info!("Video capture started for {}x{} at {}fps",
-              self.config.width, self.config.height, self.config.fps);
+        info!(
+            "Video capture started for {}x{} at {}fps",
+            self.config.width, self.config.height, self.config.fps
+        );
 
         Ok(())
     }
@@ -248,11 +258,12 @@ impl VideoCapture {
         #[cfg(feature = "streaming")]
         {
             if let Some(pipeline) = &self.pipeline {
-                pipeline.set_state(gst::State::Null)
-                    .map_err(|e| StreamingError::PipelineError {
+                pipeline.set_state(gst::State::Null).map_err(|e| {
+                    StreamingError::PipelineError {
                         operation: "stop".to_string(),
                         reason: e.to_string(),
-                    })?;
+                    }
+                })?;
             }
             self.pipeline = None;
             self.appsink = None;
@@ -289,10 +300,12 @@ impl VideoCapture {
         let pipeline = gst::Pipeline::new(Some("video-capture"));
 
         // Video source (X11 screen capture)
-        let video_src = gst::ElementFactory::make("ximagesrc", Some("video-source"))
-            .map_err(|e| StreamingError::PipelineError {
-                operation: "create ximagesrc".to_string(),
-                reason: e.to_string(),
+        let video_src =
+            gst::ElementFactory::make("ximagesrc", Some("video-source")).map_err(|e| {
+                StreamingError::PipelineError {
+                    operation: "create ximagesrc".to_string(),
+                    reason: e.to_string(),
+                }
             })?;
 
         // Configure source for specific window
@@ -300,24 +313,29 @@ impl VideoCapture {
         video_src.set_property("use-damage", true);
 
         // Video rate control
-        let videorate = gst::ElementFactory::make("videorate", Some("rate-control"))
-            .map_err(|e| StreamingError::PipelineError {
-                operation: "create videorate".to_string(),
-                reason: e.to_string(),
+        let videorate =
+            gst::ElementFactory::make("videorate", Some("rate-control")).map_err(|e| {
+                StreamingError::PipelineError {
+                    operation: "create videorate".to_string(),
+                    reason: e.to_string(),
+                }
             })?;
 
         // Video scale and format conversion
-        let videoconvert = gst::ElementFactory::make("videoconvert", Some("converter"))
-            .map_err(|e| StreamingError::PipelineError {
-                operation: "create videoconvert".to_string(),
-                reason: e.to_string(),
+        let videoconvert =
+            gst::ElementFactory::make("videoconvert", Some("converter")).map_err(|e| {
+                StreamingError::PipelineError {
+                    operation: "create videoconvert".to_string(),
+                    reason: e.to_string(),
+                }
             })?;
 
-        let videoscale = gst::ElementFactory::make("videoscale", Some("scaler"))
-            .map_err(|e| StreamingError::PipelineError {
+        let videoscale = gst::ElementFactory::make("videoscale", Some("scaler")).map_err(|e| {
+            StreamingError::PipelineError {
                 operation: "create videoscale".to_string(),
                 reason: e.to_string(),
-            })?;
+            }
+        })?;
 
         // Encoder based on configuration
         let encoder = self.create_encoder()?;
@@ -340,17 +358,19 @@ impl VideoCapture {
         appsink.set_caps(Some(&caps));
 
         // Add elements to pipeline
-        pipeline.add_many(&[
-            &video_src,
-            &videorate,
-            &videoconvert,
-            &videoscale,
-            &encoder,
-            appsink.upcast_ref(),
-        ]).map_err(|e| StreamingError::PipelineError {
-            operation: "add elements".to_string(),
-            reason: e.to_string(),
-        })?;
+        pipeline
+            .add_many(&[
+                &video_src,
+                &videorate,
+                &videoconvert,
+                &videoscale,
+                &encoder,
+                appsink.upcast_ref(),
+            ])
+            .map_err(|e| StreamingError::PipelineError {
+                operation: "add elements".to_string(),
+                reason: e.to_string(),
+            })?;
 
         // Link elements
         gst::Element::link_many(&[
@@ -360,7 +380,8 @@ impl VideoCapture {
             &videoscale,
             &encoder,
             appsink.upcast_ref(),
-        ]).map_err(|e| StreamingError::PipelineError {
+        ])
+        .map_err(|e| StreamingError::PipelineError {
             operation: "link elements".to_string(),
             reason: e.to_string(),
         })?;
@@ -410,10 +431,12 @@ impl VideoCapture {
         match self.config.encoder {
             VideoEncoder::NVENC => {
                 debug!("Creating NVENC H264 encoder");
-                let encoder = gst::ElementFactory::make("nvh264enc", Some("encoder"))
-                    .map_err(|e| StreamingError::EncoderNotAvailable {
-                        encoder: "NVENC".to_string(),
-                        reason: e.to_string(),
+                let encoder =
+                    gst::ElementFactory::make("nvh264enc", Some("encoder")).map_err(|e| {
+                        StreamingError::EncoderNotAvailable {
+                            encoder: "NVENC".to_string(),
+                            reason: e.to_string(),
+                        }
                     })?;
 
                 // Configure NVENC settings
@@ -428,10 +451,12 @@ impl VideoCapture {
             }
             VideoEncoder::VAAPI => {
                 debug!("Creating VAAPI H264 encoder");
-                let encoder = gst::ElementFactory::make("vaapih264enc", Some("encoder"))
-                    .map_err(|e| StreamingError::EncoderNotAvailable {
-                        encoder: "VAAPI".to_string(),
-                        reason: e.to_string(),
+                let encoder =
+                    gst::ElementFactory::make("vaapih264enc", Some("encoder")).map_err(|e| {
+                        StreamingError::EncoderNotAvailable {
+                            encoder: "VAAPI".to_string(),
+                            reason: e.to_string(),
+                        }
                     })?;
 
                 encoder.set_property("bitrate", self.config.bitrate);
@@ -441,10 +466,12 @@ impl VideoCapture {
             }
             VideoEncoder::Software => {
                 debug!("Creating software H264 encoder");
-                let encoder = gst::ElementFactory::make("x264enc", Some("encoder"))
-                    .map_err(|e| StreamingError::EncoderNotAvailable {
-                        encoder: "x264".to_string(),
-                        reason: e.to_string(),
+                let encoder =
+                    gst::ElementFactory::make("x264enc", Some("encoder")).map_err(|e| {
+                        StreamingError::EncoderNotAvailable {
+                            encoder: "x264".to_string(),
+                            reason: e.to_string(),
+                        }
                     })?;
 
                 encoder.set_property("bitrate", self.config.bitrate);
@@ -463,7 +490,8 @@ impl VideoCapture {
         if let Some(pipeline) = &self.pipeline {
             debug!("Starting GStreamer pipeline");
 
-            pipeline.set_state(gst::State::Playing)
+            pipeline
+                .set_state(gst::State::Playing)
                 .map_err(|e| StreamingError::PipelineError {
                     operation: "start".to_string(),
                     reason: e.to_string(),
@@ -473,20 +501,22 @@ impl VideoCapture {
             let bus = pipeline.bus().unwrap();
             let state_change = pipeline.state_change_timeout();
 
-            match bus.timed_pop_filtered(state_change, &[gst::MessageType::StateChanged, gst::MessageType::Error]) {
-                Some(msg) => {
-                    match msg.view() {
-                        gst::MessageView::Error(err) => {
-                            return Err(StreamingError::PipelineError {
-                                operation: "pipeline startup".to_string(),
-                                reason: format!("{}: {}", err.error(), err.debug().unwrap_or_default()),
-                            }.into());
+            match bus.timed_pop_filtered(
+                state_change,
+                &[gst::MessageType::StateChanged, gst::MessageType::Error],
+            ) {
+                Some(msg) => match msg.view() {
+                    gst::MessageView::Error(err) => {
+                        return Err(StreamingError::PipelineError {
+                            operation: "pipeline startup".to_string(),
+                            reason: format!("{}: {}", err.error(), err.debug().unwrap_or_default()),
                         }
-                        _ => {
-                            debug!("Pipeline started successfully");
-                        }
+                        .into());
                     }
-                }
+                    _ => {
+                        debug!("Pipeline started successfully");
+                    }
+                },
                 None => {
                     warn!("Pipeline startup timeout");
                 }
@@ -579,7 +609,6 @@ impl Drop for VideoCapture {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -625,7 +654,10 @@ mod tests {
         // Stop capture
         let stop_result = capture.stop_capture().await;
         assert!(stop_result.is_ok(), "Capture stop should succeed");
-        assert!(!capture.is_capturing(), "Should not be capturing after stop");
+        assert!(
+            !capture.is_capturing(),
+            "Should not be capturing after stop"
+        );
     }
 
     #[tokio::test]
@@ -648,7 +680,10 @@ mod tests {
 
         // Check that frames are being generated
         let stats = capture.get_stats();
-        assert!(stats.frames_captured > 0, "Should have captured some frames");
+        assert!(
+            stats.frames_captured > 0,
+            "Should have captured some frames"
+        );
 
         capture.stop_capture().await.unwrap();
     }

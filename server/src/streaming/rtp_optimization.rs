@@ -3,20 +3,20 @@
 //! This module implements high-performance RTP packet parsing and generation
 //! using SIMD instructions to achieve 60% faster processing than baseline.
 
-use crate::streaming::{SIMDVideoProcessor, CPUCapabilities};
 use crate::error::{Result, StreamingError};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use cache_padded::CachePadded;
-use smallvec::{SmallVec, smallvec};
+use crate::streaming::{CPUCapabilities, SIMDVideoProcessor};
 use arrayvec::ArrayVec;
 use bumpalo::Bump;
-use tracing::{debug, warn, error};
+use cache_padded::CachePadded;
+use smallvec::{smallvec, SmallVec};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use tracing::{debug, error, warn};
 
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
 
 /// SIMD-accelerated RTP packet processor
 pub struct SIMDRtpProcessor {
@@ -83,8 +83,10 @@ pub struct RtpPacketBatch {
 impl SIMDRtpProcessor {
     /// Create a new SIMD-accelerated RTP processor
     pub fn new(cpu_capabilities: CPUCapabilities) -> Self {
-        debug!("Initializing SIMD RTP processor with capabilities: AVX2={}, NEON={}",
-               cpu_capabilities.has_avx2, cpu_capabilities.has_neon);
+        debug!(
+            "Initializing SIMD RTP processor with capabilities: AVX2={}, NEON={}",
+            cpu_capabilities.has_avx2, cpu_capabilities.has_neon
+        );
 
         Self {
             cpu_capabilities,
@@ -112,12 +114,16 @@ impl SIMDRtpProcessor {
         // Update statistics
         let parse_time_ns = start_time.elapsed().as_nanos() as u64;
         self.stats.packets_processed.fetch_add(1, Ordering::Relaxed);
-        self.stats.total_bytes_processed.fetch_add(data.len() as u64, Ordering::Relaxed);
+        self.stats
+            .total_bytes_processed
+            .fetch_add(data.len() as u64, Ordering::Relaxed);
 
         // Update rolling average parse time
         let current_avg = self.stats.average_parse_time_ns.load(Ordering::Relaxed);
         let new_avg = (current_avg + parse_time_ns) / 2;
-        self.stats.average_parse_time_ns.store(new_avg, Ordering::Relaxed);
+        self.stats
+            .average_parse_time_ns
+            .store(new_avg, Ordering::Relaxed);
 
         Ok(packet)
     }
@@ -168,7 +174,9 @@ impl SIMDRtpProcessor {
         let extension = (header_byte & 0x10) != 0;
 
         // Simple packets are good candidates for SIMD
-        csrc_count == 0 && !extension && (self.cpu_capabilities.has_avx2 || self.cpu_capabilities.has_neon)
+        csrc_count == 0
+            && !extension
+            && (self.cpu_capabilities.has_avx2 || self.cpu_capabilities.has_neon)
     }
 
     /// SIMD-accelerated packet parsing using AVX2 instructions
@@ -192,8 +200,18 @@ impl SIMDRtpProcessor {
 
         // Use SIMD for endian conversion of 16-bit and 32-bit fields
         let sequence_number = u16::from_be_bytes([header_bytes[2], header_bytes[3]]);
-        let timestamp = u32::from_be_bytes([header_bytes[4], header_bytes[5], header_bytes[6], header_bytes[7]]);
-        let ssrc = u32::from_be_bytes([header_bytes[8], header_bytes[9], header_bytes[10], header_bytes[11]]);
+        let timestamp = u32::from_be_bytes([
+            header_bytes[4],
+            header_bytes[5],
+            header_bytes[6],
+            header_bytes[7],
+        ]);
+        let ssrc = u32::from_be_bytes([
+            header_bytes[8],
+            header_bytes[9],
+            header_bytes[10],
+            header_bytes[11],
+        ]);
 
         // Calculate payload offset (header + CSRC + extensions)
         let header_size = 12 + (csrc_count as usize * 4);
@@ -207,7 +225,9 @@ impl SIMDRtpProcessor {
         let mut payload = SmallVec::new();
         payload.extend_from_slice(payload_data);
 
-        self.stats.packets_parsed_simd.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .packets_parsed_simd
+            .fetch_add(1, Ordering::Relaxed);
 
         Ok(FastRtpPacket {
             version,
@@ -247,8 +267,18 @@ impl SIMDRtpProcessor {
 
         // NEON-accelerated endian conversion
         let sequence_number = u16::from_be_bytes([header_bytes[2], header_bytes[3]]);
-        let timestamp = u32::from_be_bytes([header_bytes[4], header_bytes[5], header_bytes[6], header_bytes[7]]);
-        let ssrc = u32::from_be_bytes([header_bytes[8], header_bytes[9], header_bytes[10], header_bytes[11]]);
+        let timestamp = u32::from_be_bytes([
+            header_bytes[4],
+            header_bytes[5],
+            header_bytes[6],
+            header_bytes[7],
+        ]);
+        let ssrc = u32::from_be_bytes([
+            header_bytes[8],
+            header_bytes[9],
+            header_bytes[10],
+            header_bytes[11],
+        ]);
 
         // Calculate payload offset
         let header_size = 12 + (csrc_count as usize * 4);
@@ -262,7 +292,9 @@ impl SIMDRtpProcessor {
         let mut payload = SmallVec::new();
         payload.extend_from_slice(payload_data);
 
-        self.stats.packets_parsed_simd.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .packets_parsed_simd
+            .fetch_add(1, Ordering::Relaxed);
 
         Ok(FastRtpPacket {
             version,
@@ -309,7 +341,12 @@ impl SIMDRtpProcessor {
                 self.stats.parsing_errors.fetch_add(1, Ordering::Relaxed);
                 return Err(StreamingError::InvalidPacket.into());
             }
-            let csrc = u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]);
+            let csrc = u32::from_be_bytes([
+                data[offset],
+                data[offset + 1],
+                data[offset + 2],
+                data[offset + 3],
+            ]);
             csrc_list.push(csrc);
             offset += 4;
         }
@@ -320,7 +357,8 @@ impl SIMDRtpProcessor {
                 self.stats.parsing_errors.fetch_add(1, Ordering::Relaxed);
                 return Err(StreamingError::InvalidPacket.into());
             }
-            let extension_length = u16::from_be_bytes([data[offset + 2], data[offset + 3]]) as usize * 4;
+            let extension_length =
+                u16::from_be_bytes([data[offset + 2], data[offset + 3]]) as usize * 4;
             offset += 4 + extension_length;
         }
 
@@ -334,7 +372,9 @@ impl SIMDRtpProcessor {
         let mut payload = SmallVec::new();
         payload.extend_from_slice(payload_data);
 
-        self.stats.packets_parsed_scalar.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .packets_parsed_scalar
+            .fetch_add(1, Ordering::Relaxed);
 
         Ok(FastRtpPacket {
             version,
@@ -356,7 +396,11 @@ impl SIMDRtpProcessor {
     /// AVX2-accelerated batch processing for multiple packets
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
-    unsafe fn parse_batch_avx2(&mut self, packet_data: &[&[u8]], batch: &mut RtpPacketBatch) -> Result<()> {
+    unsafe fn parse_batch_avx2(
+        &mut self,
+        packet_data: &[&[u8]],
+        batch: &mut RtpPacketBatch,
+    ) -> Result<()> {
         // Process packets 4 at a time using AVX2 256-bit registers
         for chunk in packet_data.chunks(4) {
             for data in chunk {
@@ -383,7 +427,11 @@ impl SIMDRtpProcessor {
     /// ARM NEON-accelerated batch processing
     #[cfg(target_arch = "aarch64")]
     #[target_feature(enable = "neon")]
-    unsafe fn parse_batch_neon(&mut self, packet_data: &[&[u8]], batch: &mut RtpPacketBatch) -> Result<()> {
+    unsafe fn parse_batch_neon(
+        &mut self,
+        packet_data: &[&[u8]],
+        batch: &mut RtpPacketBatch,
+    ) -> Result<()> {
         // Process packets 4 at a time using NEON 128-bit registers
         for chunk in packet_data.chunks(4) {
             for data in chunk {
@@ -433,10 +481,10 @@ impl SIMDRtpProcessor {
     #[target_feature(enable = "avx2")]
     unsafe fn generate_header_simd(&self, data: &mut [u8], packet: &FastRtpPacket) -> Result<()> {
         // Build header using SIMD operations
-        let header_byte = (packet.version << 6) |
-                         (if packet.padding { 0x20 } else { 0 }) |
-                         (if packet.extension { 0x10 } else { 0 }) |
-                         packet.csrc_count;
+        let header_byte = (packet.version << 6)
+            | (if packet.padding { 0x20 } else { 0 })
+            | (if packet.extension { 0x10 } else { 0 })
+            | packet.csrc_count;
 
         let marker_and_pt = (if packet.marker { 0x80 } else { 0 }) | packet.payload_type;
 
@@ -451,10 +499,10 @@ impl SIMDRtpProcessor {
 
     /// Scalar header generation fallback
     fn generate_header_scalar(&self, data: &mut [u8], packet: &FastRtpPacket) -> Result<()> {
-        let header_byte = (packet.version << 6) |
-                         (if packet.padding { 0x20 } else { 0 }) |
-                         (if packet.extension { 0x10 } else { 0 }) |
-                         packet.csrc_count;
+        let header_byte = (packet.version << 6)
+            | (if packet.padding { 0x20 } else { 0 })
+            | (if packet.extension { 0x10 } else { 0 })
+            | packet.csrc_count;
 
         let marker_and_pt = (if packet.marker { 0x80 } else { 0 }) | packet.payload_type;
 
@@ -478,22 +526,22 @@ impl SIMDRtpProcessor {
     pub fn get_stats(&self) -> RtpProcessingStats {
         RtpProcessingStats {
             packets_processed: CachePadded::new(AtomicU64::new(
-                self.stats.packets_processed.load(Ordering::Relaxed)
+                self.stats.packets_processed.load(Ordering::Relaxed),
             )),
             packets_parsed_simd: CachePadded::new(AtomicU64::new(
-                self.stats.packets_parsed_simd.load(Ordering::Relaxed)
+                self.stats.packets_parsed_simd.load(Ordering::Relaxed),
             )),
             packets_parsed_scalar: CachePadded::new(AtomicU64::new(
-                self.stats.packets_parsed_scalar.load(Ordering::Relaxed)
+                self.stats.packets_parsed_scalar.load(Ordering::Relaxed),
             )),
             average_parse_time_ns: CachePadded::new(AtomicU64::new(
-                self.stats.average_parse_time_ns.load(Ordering::Relaxed)
+                self.stats.average_parse_time_ns.load(Ordering::Relaxed),
             )),
             total_bytes_processed: CachePadded::new(AtomicU64::new(
-                self.stats.total_bytes_processed.load(Ordering::Relaxed)
+                self.stats.total_bytes_processed.load(Ordering::Relaxed),
             )),
             parsing_errors: CachePadded::new(AtomicU64::new(
-                self.stats.parsing_errors.load(Ordering::Relaxed)
+                self.stats.parsing_errors.load(Ordering::Relaxed),
             )),
         }
     }
@@ -560,10 +608,11 @@ mod tests {
         let mut packet_data = vec![0u8; 20];
         packet_data[0] = 0x80; // Version 2, no padding, no extension, no CSRC
         packet_data[1] = 0x60; // No marker, payload type 96
-        packet_data[2] = 0x00; packet_data[3] = 0x01; // Sequence number 1
+        packet_data[2] = 0x00;
+        packet_data[3] = 0x01; // Sequence number 1
         packet_data[4..8].copy_from_slice(&1000u32.to_be_bytes()); // Timestamp
         packet_data[8..12].copy_from_slice(&0x12345678u32.to_be_bytes()); // SSRC
-        // Payload: 8 bytes of data
+                                                                          // Payload: 8 bytes of data
         packet_data[12..20].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
 
         let result = processor.parse_packet(&packet_data);
@@ -634,8 +683,14 @@ mod tests {
         assert_eq!(data[0], 0x80);
         assert_eq!(data[1], 0x60);
         assert_eq!(u16::from_be_bytes([data[2], data[3]]), 100);
-        assert_eq!(u32::from_be_bytes([data[4], data[5], data[6], data[7]]), 2000);
-        assert_eq!(u32::from_be_bytes([data[8], data[9], data[10], data[11]]), 0x87654321);
+        assert_eq!(
+            u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
+            2000
+        );
+        assert_eq!(
+            u32::from_be_bytes([data[8], data[9], data[10], data[11]]),
+            0x87654321
+        );
         assert_eq!(&data[12..], &[10, 20, 30, 40]);
     }
 }

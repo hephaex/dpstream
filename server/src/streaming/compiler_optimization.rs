@@ -6,16 +6,16 @@
 //! Author: Mario Cho <hephaex@gmail.com>
 //! Date: January 10, 2025
 
-use std::sync::Arc;
+use crate::streaming::quantum_optimization::{OptimizationCandidate, QuantumOptimizationSystem};
+use anyhow::{Context, Result};
+use parking_lot::{Mutex, RwLock};
+use serde::{Deserialize, Serialize};
+use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::fs;
-use std::env;
-use parking_lot::{RwLock, Mutex};
-use serde::{Serialize, Deserialize};
-use tracing::{info, debug, warn, error};
-use anyhow::{Result, Context};
-use crate::streaming::quantum_optimization::{QuantumOptimizationSystem, OptimizationCandidate};
+use std::sync::Arc;
+use tracing::{debug, error, info, warn};
 
 /// Profile-Guided Optimization (PGO) system for runtime optimization
 pub struct ProfileGuidedOptimizer {
@@ -59,10 +59,10 @@ pub struct CompilerOptimizationSystem {
 pub struct PGOConfig {
     pub enable_instrumentation: bool,
     pub profile_output_dir: PathBuf,
-    pub training_workload_duration: u64, // seconds
-    pub profile_data_retention: u64, // hours
+    pub training_workload_duration: u64,         // seconds
+    pub profile_data_retention: u64,             // hours
     pub instrumentation_overhead_threshold: f64, // percentage
-    pub hot_function_threshold: f64, // percentage
+    pub hot_function_threshold: f64,             // percentage
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,9 +117,9 @@ pub struct PGOStats {
     pub profiles_collected: u64,
     pub training_sessions: u64,
     pub optimization_applications: u64,
-    pub performance_improvement: f64, // percentage
+    pub performance_improvement: f64,   // percentage
     pub compilation_time_overhead: u64, // milliseconds
-    pub binary_size_change: i64, // bytes (can be negative)
+    pub binary_size_change: i64,        // bytes (can be negative)
 }
 
 #[derive(Debug, Default)]
@@ -129,8 +129,8 @@ pub struct BoltStats {
     pub blocks_reordered: u64,
     pub branches_optimized: u64,
     pub performance_improvement: f64, // percentage
-    pub binary_size_change: i64, // bytes
-    pub optimization_time: u64, // milliseconds
+    pub binary_size_change: i64,      // bytes
+    pub optimization_time: u64,       // milliseconds
 }
 
 impl ProfileGuidedOptimizer {
@@ -164,8 +164,10 @@ impl ProfileGuidedOptimizer {
         env::set_var("RUSTFLAGS", rustflags.join(" "));
         self.instrumentation_enabled = true;
 
-        debug!("PGO instrumentation enabled with output dir: {}",
-               self.config.profile_output_dir.display());
+        debug!(
+            "PGO instrumentation enabled with output dir: {}",
+            self.config.profile_output_dir.display()
+        );
         Ok(())
     }
 
@@ -175,8 +177,10 @@ impl ProfileGuidedOptimizer {
             return Err(anyhow::anyhow!("PGO instrumentation not enabled"));
         }
 
-        info!("Starting PGO profile data collection for {} seconds",
-              self.config.training_workload_duration);
+        info!(
+            "Starting PGO profile data collection for {} seconds",
+            self.config.training_workload_duration
+        );
 
         let start_time = std::time::Instant::now();
 
@@ -212,8 +216,10 @@ impl ProfileGuidedOptimizer {
         // Apply optimizations
         env::set_var("RUSTFLAGS", optimized_flags.join(" "));
 
-        info!("PGO optimizations applied: {} hot functions identified",
-              profile_data.hot_paths.len());
+        info!(
+            "PGO optimizations applied: {} hot functions identified",
+            profile_data.hot_paths.len()
+        );
 
         let mut stats = self.stats.lock();
         stats.optimization_applications += 1;
@@ -294,7 +300,9 @@ impl ProfileGuidedOptimizer {
         let profile_files = fs::read_dir(&self.profile_output_dir)?
             .filter_map(|entry| entry.ok())
             .filter(|entry| {
-                entry.path().extension()
+                entry
+                    .path()
+                    .extension()
                     .and_then(|ext| ext.to_str())
                     .map(|ext| ext == "profraw" || ext == "profdata")
                     .unwrap_or(false)
@@ -323,13 +331,17 @@ impl ProfileGuidedOptimizer {
                 average_execution_time: (exec_percentage * 1000.0) as u64, // nanoseconds
             };
             profile_data.hot_paths.push(hot_path);
-            profile_data.function_call_counts.insert(func_name.to_string(), call_count);
+            profile_data
+                .function_call_counts
+                .insert(func_name.to_string(), call_count);
         }
 
         profile_data.total_execution_time = 1_000_000_000; // 1 second in nanoseconds
 
-        info!("Profile analysis complete: {} hot paths identified",
-              profile_data.hot_paths.len());
+        info!(
+            "Profile analysis complete: {} hot paths identified",
+            profile_data.hot_paths.len()
+        );
 
         Ok(())
     }
@@ -346,7 +358,10 @@ impl ProfileGuidedOptimizer {
         ];
 
         // Add profile-use flag
-        flags.push(format!("-Cprofile-use={}", self.profile_output_dir.display()));
+        flags.push(format!(
+            "-Cprofile-use={}",
+            self.profile_output_dir.display()
+        ));
 
         // Add hot function optimization hints
         for hot_path in &profile_data.hot_paths {
@@ -368,7 +383,8 @@ impl ProfileGuidedOptimizer {
 
     /// Calculate performance improvement from profile data
     fn calculate_performance_improvement(&self, profile_data: &ProfileData) -> f64 {
-        let total_hot_percentage: f64 = profile_data.hot_paths
+        let total_hot_percentage: f64 = profile_data
+            .hot_paths
             .iter()
             .map(|path| path.execution_percentage)
             .sum();
@@ -413,11 +429,13 @@ impl BoltOptimizer {
         let perf_cmd = Command::new("perf")
             .args(&[
                 "record",
-                "-e", "cycles:u,instructions:u,cache-misses:u,branch-misses:u",
-                "-o", self.profile_data_path.to_str().unwrap(),
+                "-e",
+                "cycles:u,instructions:u,cache-misses:u,branch-misses:u",
+                "-o",
+                self.profile_data_path.to_str().unwrap(),
                 "--",
                 self.binary_path.to_str().unwrap(),
-                "--training-mode"
+                "--training-mode",
             ])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -467,8 +485,10 @@ impl BoltOptimizer {
 
         let mut bolt_args = vec![
             self.binary_path.to_str().unwrap(),
-            "-o", optimized_binary.to_str().unwrap(),
-            "-data", self.profile_data_path.to_str().unwrap(),
+            "-o",
+            optimized_binary.to_str().unwrap(),
+            "-data",
+            self.profile_data_path.to_str().unwrap(),
         ];
 
         // Add optimization flags based on configuration
@@ -491,9 +511,7 @@ impl BoltOptimizer {
 
         let start_time = std::time::Instant::now();
 
-        let output = Command::new("llvm-bolt")
-            .args(&bolt_args)
-            .output()?;
+        let output = Command::new("llvm-bolt").args(&bolt_args).output()?;
 
         let optimization_time = start_time.elapsed();
 
@@ -590,7 +608,10 @@ impl CompilerFlagOptimizer {
 
         // Target features
         if !self.target_features.is_empty() {
-            flags.push(format!("-Ctarget-features={}", self.target_features.join(",")));
+            flags.push(format!(
+                "-Ctarget-features={}",
+                self.target_features.join(",")
+            ));
         }
 
         // LTO configuration
@@ -706,7 +727,10 @@ impl CompilerOptimizationSystem {
         // Step 0: Quantum optimization for optimal compiler configuration
         if self.optimization_pipeline.enable_quantum_optimization {
             info!("Phase 1: Quantum optimization for compiler configuration");
-            let quantum_candidate = self.quantum_optimizer.optimize_compiler_configuration().await?;
+            let quantum_candidate = self
+                .quantum_optimizer
+                .optimize_compiler_configuration()
+                .await?;
 
             // Apply quantum-optimized flags
             let quantum_flags = quantum_candidate.compiler_flags.join(" ");
@@ -714,8 +738,10 @@ impl CompilerOptimizationSystem {
             let combined_flags = format!("{} {}", existing_flags, quantum_flags);
             env::set_var("RUSTFLAGS", &combined_flags);
 
-            info!("Applied quantum-optimized compiler flags with {:.1}% predicted improvement",
-                  (quantum_candidate.predicted_performance - 1.0) * 100.0);
+            info!(
+                "Applied quantum-optimized compiler flags with {:.1}% predicted improvement",
+                (quantum_candidate.predicted_performance - 1.0) * 100.0
+            );
         }
 
         // Step 1: Generate optimized compiler flags
@@ -752,8 +778,14 @@ impl CompilerOptimizationSystem {
         results.compilation_time_increase = total_time.as_millis() as u64;
         results.optimization_timestamp = Some(std::time::SystemTime::now());
 
-        info!("Compiler optimization pipeline completed in {:?}", total_time);
-        info!("Total performance improvement: {:.1}%", results.total_improvement);
+        info!(
+            "Compiler optimization pipeline completed in {:?}",
+            total_time
+        );
+        info!(
+            "Total performance improvement: {:.1}%",
+            results.total_improvement
+        );
 
         Ok(optimized_binary)
     }

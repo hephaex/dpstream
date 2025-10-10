@@ -5,15 +5,15 @@
 pub mod audio;
 pub mod decoder;
 
-use crate::error::{Result, MoonlightError, NetworkError};
-use crate::input::{InputState, MoonlightInput};
+use self::audio::{AudioFrame, AudioPlayer};
 use crate::display::VideoFrame;
-use self::audio::{AudioPlayer, AudioFrame};
+use crate::error::{MoonlightError, NetworkError, Result};
+use crate::input::{InputState, MoonlightInput};
 use alloc::string::String;
 use alloc::vec::Vec;
-use heapless::Vec as HeaplessVec;
 use cache_padded::CachePadded;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use heapless::Vec as HeaplessVec;
 
 /// Main Moonlight client
 pub struct MoonlightClient {
@@ -190,7 +190,8 @@ impl MoonlightClient {
             let nal_type = fu_header & 0x1F;
             let reconstructed_nal_header = (rtp_packet.payload[0] & 0xE0) | nal_type;
 
-            self.decoder.start_fragmented_unit(reconstructed_nal_header)?;
+            self.decoder
+                .start_fragmented_unit(reconstructed_nal_header)?;
         }
 
         // Add fragment data
@@ -648,15 +649,9 @@ impl<'a> RtpPacket<'a> {
         }
 
         // Optimized field extraction using unsafe for performance (bounds already checked)
-        let header_word1 = unsafe {
-            u32::from_be_bytes([data[0], data[1], data[2], data[3]])
-        };
-        let header_word2 = unsafe {
-            u32::from_be_bytes([data[4], data[5], data[6], data[7]])
-        };
-        let header_word3 = unsafe {
-            u32::from_be_bytes([data[8], data[9], data[10], data[11]])
-        };
+        let header_word1 = unsafe { u32::from_be_bytes([data[0], data[1], data[2], data[3]]) };
+        let header_word2 = unsafe { u32::from_be_bytes([data[4], data[5], data[6], data[7]]) };
+        let header_word3 = unsafe { u32::from_be_bytes([data[8], data[9], data[10], data[11]]) };
 
         // Extract fields from packed header words
         let version = (header_word1 >> 30) as u8;
@@ -799,9 +794,9 @@ impl AudioPlayer {
         if self.audio_buffer.push(frame).is_err() {
             // Buffer full, drop oldest frame
             let _ = self.audio_buffer.pop();
-            self.audio_buffer.push(frame).map_err(|_|
-                crate::error::ClientError::AudioBufferOverflow
-            )?;
+            self.audio_buffer
+                .push(frame)
+                .map_err(|_| crate::error::ClientError::AudioBufferOverflow)?;
         }
 
         // Process audio frames in buffer
@@ -828,7 +823,8 @@ impl AudioPlayer {
 
     fn queue_pcm_samples(&mut self, samples: &[i16], timestamp: u64) -> Result<()> {
         // Apply volume adjustment
-        let adjusted_samples: HeaplessVec<i16, 1024> = samples.iter()
+        let adjusted_samples: HeaplessVec<i16, 1024> = samples
+            .iter()
             .map(|&sample| ((sample as f32) * self.volume) as i16)
             .take(1024)
             .collect();
@@ -838,14 +834,15 @@ impl AudioPlayer {
             if self.pcm_buffer.push(sample).is_err() {
                 // Buffer full, play current buffer
                 self.flush_audio_buffer()?;
-                self.pcm_buffer.push(sample).map_err(|_|
-                    crate::error::ClientError::AudioBufferOverflow
-                )?;
+                self.pcm_buffer
+                    .push(sample)
+                    .map_err(|_| crate::error::ClientError::AudioBufferOverflow)?;
             }
         }
 
         // Check if we have enough samples for playback
-        if self.pcm_buffer.len() >= 480 { // 10ms worth at 48kHz
+        if self.pcm_buffer.len() >= 480 {
+            // 10ms worth at 48kHz
             self.flush_audio_buffer()?;
         }
 

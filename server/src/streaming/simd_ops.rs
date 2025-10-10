@@ -79,7 +79,13 @@ impl SIMDVideoProcessor {
     }
 
     /// Convert YUV420 to RGB24 with SIMD acceleration
-    pub fn yuv420_to_rgb24(&mut self, yuv_data: &[u8], rgb_data: &mut [u8], width: usize, height: usize) -> Result<(), SIMDError> {
+    pub fn yuv420_to_rgb24(
+        &mut self,
+        yuv_data: &[u8],
+        rgb_data: &mut [u8],
+        width: usize,
+        height: usize,
+    ) -> Result<(), SIMDError> {
         if yuv_data.len() < width * height * 3 / 2 {
             return Err(SIMDError::InvalidInputSize);
         }
@@ -115,7 +121,13 @@ impl SIMDVideoProcessor {
     /// AVX2-accelerated YUV to RGB conversion (x86_64)
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
-    unsafe fn yuv420_to_rgb24_avx2(&mut self, yuv_data: &[u8], rgb_data: &mut [u8], width: usize, height: usize) -> Result<(), SIMDError> {
+    unsafe fn yuv420_to_rgb24_avx2(
+        &mut self,
+        yuv_data: &[u8],
+        rgb_data: &mut [u8],
+        width: usize,
+        height: usize,
+    ) -> Result<(), SIMDError> {
         let y_plane = &yuv_data[0..width * height];
         let u_plane = &yuv_data[width * height..width * height + width * height / 4];
         let v_plane = &yuv_data[width * height + width * height / 4..];
@@ -142,11 +154,11 @@ impl SIMDVideoProcessor {
                     // Expand U and V to 256-bit by duplicating each value (for 4:2:0 upsampling)
                     let u_values = _mm256_unpacklo_epi8(
                         _mm256_inserti128_si256(_mm256_setzero_si256(), u_values_128, 0),
-                        _mm256_inserti128_si256(_mm256_setzero_si256(), u_values_128, 0)
+                        _mm256_inserti128_si256(_mm256_setzero_si256(), u_values_128, 0),
                     );
                     let v_values = _mm256_unpacklo_epi8(
                         _mm256_inserti128_si256(_mm256_setzero_si256(), v_values_128, 0),
-                        _mm256_inserti128_si256(_mm256_setzero_si256(), v_values_128, 0)
+                        _mm256_inserti128_si256(_mm256_setzero_si256(), v_values_128, 0),
                     );
 
                     // Convert to 16-bit for calculations
@@ -165,10 +177,14 @@ impl SIMDVideoProcessor {
                     let c128 = _mm256_set1_epi16(128);
 
                     // Process lower 16 pixels
-                    let (r_lo, g_lo, b_lo) = self.yuv_to_rgb_calc_avx2(y_16_lo, u_16, v_16, c298, c409, c208, c100, c516, c128);
+                    let (r_lo, g_lo, b_lo) = self.yuv_to_rgb_calc_avx2(
+                        y_16_lo, u_16, v_16, c298, c409, c208, c100, c516, c128,
+                    );
 
                     // Process upper 16 pixels
-                    let (r_hi, g_hi, b_hi) = self.yuv_to_rgb_calc_avx2(y_16_hi, u_16, v_16, c298, c409, c208, c100, c516, c128);
+                    let (r_hi, g_hi, b_hi) = self.yuv_to_rgb_calc_avx2(
+                        y_16_hi, u_16, v_16, c298, c409, c208, c100, c516, c128,
+                    );
 
                     // Pack results back to 8-bit
                     let r_packed = _mm256_packus_epi16(r_lo, r_hi);
@@ -176,7 +192,13 @@ impl SIMDVideoProcessor {
                     let b_packed = _mm256_packus_epi16(b_lo, b_hi);
 
                     // Interleave RGB values and store
-                    self.store_rgb_interleaved_avx2(rgb_data, y * width + x, r_packed, g_packed, b_packed)?;
+                    self.store_rgb_interleaved_avx2(
+                        rgb_data,
+                        y * width + x,
+                        r_packed,
+                        g_packed,
+                        b_packed,
+                    )?;
                 } else {
                     // Handle remaining pixels with scalar code
                     for i in 0..pixels_remaining {
@@ -186,7 +208,8 @@ impl SIMDVideoProcessor {
                         let v_val = v_plane[(y / 2) * (width / 2) + (pixel_x / 2)] as i32 - 128;
 
                         let r = ((298 * y_val + 409 * v_val + 128) >> 8).clamp(0, 255);
-                        let g = ((298 * y_val - 100 * u_val - 208 * v_val + 128) >> 8).clamp(0, 255);
+                        let g =
+                            ((298 * y_val - 100 * u_val - 208 * v_val + 128) >> 8).clamp(0, 255);
                         let b = ((298 * y_val + 516 * u_val + 128) >> 8).clamp(0, 255);
 
                         let rgb_idx = (y * width + pixel_x) * 3;
@@ -220,9 +243,9 @@ impl SIMDVideoProcessor {
         let r = _mm256_srai_epi16(
             _mm256_add_epi16(
                 _mm256_add_epi16(_mm256_mullo_epi16(c298, y), _mm256_mullo_epi16(c409, v)),
-                c128
+                c128,
             ),
-            8
+            8,
         );
 
         // G = (298 * Y - 100 * U - 208 * V + 128) >> 8
@@ -230,20 +253,20 @@ impl SIMDVideoProcessor {
             _mm256_add_epi16(
                 _mm256_sub_epi16(
                     _mm256_sub_epi16(_mm256_mullo_epi16(c298, y), _mm256_mullo_epi16(c100, u)),
-                    _mm256_mullo_epi16(c208, v)
+                    _mm256_mullo_epi16(c208, v),
                 ),
-                c128
+                c128,
             ),
-            8
+            8,
         );
 
         // B = (298 * Y + 516 * U + 128) >> 8
         let b = _mm256_srai_epi16(
             _mm256_add_epi16(
                 _mm256_add_epi16(_mm256_mullo_epi16(c298, y), _mm256_mullo_epi16(c516, u)),
-                c128
+                c128,
             ),
-            8
+            8,
         );
 
         (r, g, b)
@@ -276,7 +299,13 @@ impl SIMDVideoProcessor {
 
     /// ARM NEON-accelerated YUV to RGB conversion
     #[cfg(target_arch = "aarch64")]
-    unsafe fn yuv420_to_rgb24_neon(&mut self, yuv_data: &[u8], rgb_data: &mut [u8], width: usize, height: usize) -> Result<(), SIMDError> {
+    unsafe fn yuv420_to_rgb24_neon(
+        &mut self,
+        yuv_data: &[u8],
+        rgb_data: &mut [u8],
+        width: usize,
+        height: usize,
+    ) -> Result<(), SIMDError> {
         use std::arch::aarch64::*;
 
         let y_plane = &yuv_data[0..width * height];
@@ -303,8 +332,14 @@ impl SIMDVideoProcessor {
                     let v_values_64 = vld1_u8(v_ptr);
 
                     // Expand U and V for 4:2:0 upsampling
-                    let u_values = vzip1q_u8(vcombine_u8(u_values_64, u_values_64), vcombine_u8(u_values_64, u_values_64));
-                    let v_values = vzip1q_u8(vcombine_u8(v_values_64, v_values_64), vcombine_u8(v_values_64, v_values_64));
+                    let u_values = vzip1q_u8(
+                        vcombine_u8(u_values_64, u_values_64),
+                        vcombine_u8(u_values_64, u_values_64),
+                    );
+                    let v_values = vzip1q_u8(
+                        vcombine_u8(v_values_64, v_values_64),
+                        vcombine_u8(v_values_64, v_values_64),
+                    );
 
                     // Convert to 16-bit for calculations
                     let y_16_lo = vmovl_u8(vget_low_u8(y_values));
@@ -323,7 +358,13 @@ impl SIMDVideoProcessor {
                     let b_packed = vcombine_u8(vqmovn_u16(b_lo), vqmovn_u16(b_hi));
 
                     // Store interleaved RGB (simplified)
-                    self.store_rgb_interleaved_neon(rgb_data, y * width + x, r_packed, g_packed, b_packed)?;
+                    self.store_rgb_interleaved_neon(
+                        rgb_data,
+                        y * width + x,
+                        r_packed,
+                        g_packed,
+                        b_packed,
+                    )?;
                 }
             }
         }
@@ -333,7 +374,12 @@ impl SIMDVideoProcessor {
 
     /// Helper function for YUV to RGB calculation with NEON
     #[cfg(target_arch = "aarch64")]
-    unsafe fn yuv_to_rgb_calc_neon(&self, y: uint16x8_t, u: uint16x8_t, v: uint16x8_t) -> (uint16x8_t, uint16x8_t, uint16x8_t) {
+    unsafe fn yuv_to_rgb_calc_neon(
+        &self,
+        y: uint16x8_t,
+        u: uint16x8_t,
+        v: uint16x8_t,
+    ) -> (uint16x8_t, uint16x8_t, uint16x8_t) {
         use std::arch::aarch64::*;
 
         // YUV to RGB conversion constants
@@ -354,11 +400,11 @@ impl SIMDVideoProcessor {
             vaddq_s16(
                 vaddq_s16(
                     vmulq_s16(vreinterpretq_s16_u16(c298), y_s),
-                    vmulq_s16(vreinterpretq_s16_u16(c409), v_s)
+                    vmulq_s16(vreinterpretq_s16_u16(c409), v_s),
                 ),
-                vreinterpretq_s16_u16(c128)
+                vreinterpretq_s16_u16(c128),
             ),
-            8
+            8,
         ));
 
         // G = (298 * Y - 100 * U - 208 * V + 128) >> 8
@@ -367,13 +413,13 @@ impl SIMDVideoProcessor {
                 vsubq_s16(
                     vsubq_s16(
                         vmulq_s16(vreinterpretq_s16_u16(c298), y_s),
-                        vmulq_s16(vreinterpretq_s16_u16(c100), u_s)
+                        vmulq_s16(vreinterpretq_s16_u16(c100), u_s),
                     ),
-                    vmulq_s16(vreinterpretq_s16_u16(c208), v_s)
+                    vmulq_s16(vreinterpretq_s16_u16(c208), v_s),
                 ),
-                vreinterpretq_s16_u16(c128)
+                vreinterpretq_s16_u16(c128),
             ),
-            8
+            8,
         ));
 
         // B = (298 * Y + 516 * U + 128) >> 8
@@ -381,11 +427,11 @@ impl SIMDVideoProcessor {
             vaddq_s16(
                 vaddq_s16(
                     vmulq_s16(vreinterpretq_s16_u16(c298), y_s),
-                    vmulq_s16(vreinterpretq_s16_u16(c516), u_s)
+                    vmulq_s16(vreinterpretq_s16_u16(c516), u_s),
                 ),
-                vreinterpretq_s16_u16(c128)
+                vreinterpretq_s16_u16(c128),
             ),
-            8
+            8,
         ));
 
         (r, g, b)
@@ -417,7 +463,13 @@ impl SIMDVideoProcessor {
     }
 
     /// Fallback scalar implementation for platforms without SIMD
-    fn yuv420_to_rgb24_scalar(&self, yuv_data: &[u8], rgb_data: &mut [u8], width: usize, height: usize) -> Result<(), SIMDError> {
+    fn yuv420_to_rgb24_scalar(
+        &self,
+        yuv_data: &[u8],
+        rgb_data: &mut [u8],
+        width: usize,
+        height: usize,
+    ) -> Result<(), SIMDError> {
         let y_plane = &yuv_data[0..width * height];
         let u_plane = &yuv_data[width * height..width * height + width * height / 4];
         let v_plane = &yuv_data[width * height + width * height / 4..];
@@ -443,7 +495,15 @@ impl SIMDVideoProcessor {
     }
 
     /// Scale image with high-quality SIMD interpolation
-    pub fn scale_image(&mut self, src: &[u8], dst: &mut [u8], src_width: usize, src_height: usize, dst_width: usize, dst_height: usize) -> Result<(), SIMDError> {
+    pub fn scale_image(
+        &mut self,
+        src: &[u8],
+        dst: &mut [u8],
+        src_width: usize,
+        src_height: usize,
+        dst_width: usize,
+        dst_height: usize,
+    ) -> Result<(), SIMDError> {
         // Bilinear interpolation with SIMD acceleration
         let x_ratio = (src_width << 16) / dst_width + 1;
         let y_ratio = (src_height << 16) / dst_height + 1;
@@ -466,12 +526,11 @@ impl SIMDVideoProcessor {
                 let d = src[y2_1 * src_width + x2_1] as u32;
 
                 // Bilinear interpolation
-                let pixel = (
-                    a * (256 - x_diff) * (256 - y_diff) +
-                    b * x_diff * (256 - y_diff) +
-                    c * y_diff * (256 - x_diff) +
-                    d * x_diff * y_diff
-                ) >> 16;
+                let pixel = (a * (256 - x_diff) * (256 - y_diff)
+                    + b * x_diff * (256 - y_diff)
+                    + c * y_diff * (256 - x_diff)
+                    + d * x_diff * y_diff)
+                    >> 16;
 
                 dst[y * dst_width + x] = pixel as u8;
             }
@@ -545,7 +604,10 @@ mod tests {
         // Verify capabilities are detected
         #[cfg(target_arch = "x86_64")]
         {
-            println!("AVX2: {}, AVX-512: {}, FMA: {}", caps.has_avx2, caps.has_avx512, caps.has_fma);
+            println!(
+                "AVX2: {}, AVX-512: {}, FMA: {}",
+                caps.has_avx2, caps.has_avx512, caps.has_fma
+            );
         }
 
         #[cfg(target_arch = "aarch64")]

@@ -7,15 +7,15 @@
 
 extern crate alloc;
 
-pub mod error;
-pub mod moonlight;
-pub mod input;
 pub mod display;
-pub mod sys;
+pub mod error;
+pub mod input;
+pub mod moonlight;
 pub mod network;
+pub mod sys;
 
-pub use error::{Result, ClientError};
-pub use moonlight::{MoonlightClient, ClientState, ServerInfo};
-pub use input::{InputManager, InputState, Buttons};
 pub use display::{DisplayManager, VideoFrame};
+pub use error::{ClientError, Result};
+pub use input::{Buttons, InputManager, InputState};
+pub use moonlight::{ClientState, MoonlightClient, ServerInfo};
 pub use sys::LibnxSystem;

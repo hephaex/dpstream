@@ -3,12 +3,12 @@
 //! Implements pre-allocated buffer pools and DMA-friendly memory management
 //! to eliminate allocation overhead in the critical video processing path.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use parking_lot::{RwLock, Mutex};
-use cache_padded::CachePadded;
-use smallvec::SmallVec;
 use bumpalo::Bump;
+use cache_padded::CachePadded;
+use parking_lot::{Mutex, RwLock};
+use smallvec::SmallVec;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 /// Zero-copy video buffer with pre-allocated memory pools
 #[repr(align(64))] // Cache line aligned for optimal performance
@@ -32,7 +32,11 @@ unsafe impl Sync for ZeroCopyVideoBuffer {}
 
 impl ZeroCopyVideoBuffer {
     /// Create a new zero-copy buffer with specified capacity
-    pub fn new(capacity: usize, buffer_id: u64, pool_id: u32) -> Result<Self, std::alloc::AllocError> {
+    pub fn new(
+        capacity: usize,
+        buffer_id: u64,
+        pool_id: u32,
+    ) -> Result<Self, std::alloc::AllocError> {
         // Allocate aligned memory for optimal cache performance
         let layout = std::alloc::Layout::from_size_align(capacity, 64)
             .map_err(|_| std::alloc::AllocError)?;
@@ -151,10 +155,10 @@ impl Default for PoolConfig {
         Self {
             buffers_per_tier: 16,
             tier_sizes: smallvec![
-                1280 * 720 * 4,    // 720p RGBA
-                1920 * 1080 * 4,   // 1080p RGBA
-                3840 * 2160 * 4,   // 4K RGBA
-                7680 * 4320 * 4,   // 8K RGBA (future)
+                1280 * 720 * 4,  // 720p RGBA
+                1920 * 1080 * 4, // 1080p RGBA
+                3840 * 2160 * 4, // 4K RGBA
+                7680 * 4320 * 4, // 8K RGBA (future)
             ],
             adaptive_allocation: true,
             max_memory_bytes: 512 * 1024 * 1024, // 512MB max
@@ -188,7 +192,7 @@ impl VideoBufferPool {
                 let buffer = Arc::new(ZeroCopyVideoBuffer::new(
                     buffer_size,
                     buffer_id,
-                    tier_id as u32
+                    tier_id as u32,
                 )?);
                 buffers.push(buffer);
                 available.push(i);
@@ -237,7 +241,10 @@ impl VideoBufferPool {
     }
 
     /// Acquire buffer from a specific tier
-    fn acquire_from_tier(&self, tier: &BufferPoolTier) -> Result<Arc<ZeroCopyVideoBuffer>, PoolError> {
+    fn acquire_from_tier(
+        &self,
+        tier: &BufferPoolTier,
+    ) -> Result<Arc<ZeroCopyVideoBuffer>, PoolError> {
         // This is a simplified implementation - in production, this would need
         // proper synchronization for the available indices
         if let Some(&index) = tier.available.last() {
@@ -269,7 +276,9 @@ impl VideoBufferPool {
                 Ok(Arc::new(buffer))
             }
             Err(_) => {
-                self.stats.allocation_failures.fetch_add(1, Ordering::Relaxed);
+                self.stats
+                    .allocation_failures
+                    .fetch_add(1, Ordering::Relaxed);
                 Err(PoolError::AllocationFailed)
             }
         }
@@ -291,12 +300,16 @@ impl VideoBufferPool {
     /// Get pool statistics for monitoring
     pub fn get_statistics(&self) -> PoolStatistics {
         PoolStatistics {
-            total_allocations: AtomicUsize::new(self.stats.total_allocations.load(Ordering::Relaxed)),
+            total_allocations: AtomicUsize::new(
+                self.stats.total_allocations.load(Ordering::Relaxed),
+            ),
             pool_hits: AtomicUsize::new(self.stats.pool_hits.load(Ordering::Relaxed)),
             pool_misses: AtomicUsize::new(self.stats.pool_misses.load(Ordering::Relaxed)),
             peak_usage: AtomicUsize::new(self.stats.peak_usage.load(Ordering::Relaxed)),
             current_usage: AtomicUsize::new(self.stats.current_usage.load(Ordering::Relaxed)),
-            allocation_failures: AtomicUsize::new(self.stats.allocation_failures.load(Ordering::Relaxed)),
+            allocation_failures: AtomicUsize::new(
+                self.stats.allocation_failures.load(Ordering::Relaxed),
+            ),
         }
     }
 
@@ -389,6 +402,6 @@ mod tests {
         // Test reference counting
         buffer.add_ref();
         assert!(!buffer.release()); // Should not be ready for release
-        assert!(buffer.release());  // Should be ready for release now
+        assert!(buffer.release()); // Should be ready for release now
     }
 }

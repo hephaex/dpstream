@@ -4,23 +4,23 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::process::{Child, Command, Stdio};
 use tokio::sync::mpsc;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamConfig {
-    pub encoder: String,      // "nvenc", "vaapi", "software"
-    pub bitrate: u32,         // Kbps
+    pub encoder: String, // "nvenc", "vaapi", "software"
+    pub bitrate: u32,    // Kbps
     pub width: u32,
     pub height: u32,
     pub fps: u32,
-    pub audio_bitrate: u32,   // Kbps
+    pub audio_bitrate: u32, // Kbps
 }
 
 impl Default for StreamConfig {
     fn default() -> Self {
         Self {
             encoder: "nvenc".to_string(),
-            bitrate: 15_000,  // 15 Mbps
+            bitrate: 15_000, // 15 Mbps
             width: 1920,
             height: 1080,
             fps: 60,
@@ -82,9 +82,13 @@ impl DolphinStreamHost {
             ));
         }
 
-        self.active_clients.insert(client_id.to_string(), client_info);
+        self.active_clients
+            .insert(client_id.to_string(), client_info);
 
-        info!("Client added successfully. Total clients: {}", self.active_clients.len());
+        info!(
+            "Client added successfully. Total clients: {}",
+            self.active_clients.len()
+        );
         Ok(())
     }
 
@@ -98,7 +102,10 @@ impl DolphinStreamHost {
     }
 
     pub async fn start_game_stream(&mut self, dolphin_window_id: u64) -> Result<()> {
-        info!("Starting game stream for Dolphin window: {:x}", dolphin_window_id);
+        info!(
+            "Starting game stream for Dolphin window: {:x}",
+            dolphin_window_id
+        );
 
         self.dolphin_window_id = Some(dolphin_window_id);
 
@@ -131,9 +138,9 @@ impl DolphinStreamHost {
         StreamStats {
             active_clients: self.active_clients.len() as u32,
             current_bitrate: self.config.bitrate,
-            frames_encoded: 0,  // Placeholder
-            frames_dropped: 0,  // Placeholder
-            average_latency_ms: 25,  // Placeholder
+            frames_encoded: 0,      // Placeholder
+            frames_dropped: 0,      // Placeholder
+            average_latency_ms: 25, // Placeholder
             network_bytes_sent: 0,  // Placeholder
         }
     }
@@ -217,10 +224,7 @@ impl DolphinStreamHost {
     }
 
     fn validate_client_capabilities(&self, capabilities: &[String]) -> bool {
-        let required_caps = vec![
-            "h264_decode".to_string(),
-            "gamestream_protocol".to_string(),
-        ];
+        let required_caps = vec!["h264_decode".to_string(), "gamestream_protocol".to_string()];
 
         for required in &required_caps {
             if !capabilities.contains(required) {

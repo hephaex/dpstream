@@ -1,4 +1,4 @@
-pub mod process;
 pub mod config;
+pub mod process;
 
-pub use process::{DolphinManager, DolphinConfig};
+pub use process::{DolphinConfig, DolphinManager};

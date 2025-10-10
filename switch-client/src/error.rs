@@ -65,7 +65,9 @@ impl fmt::Display for SystemError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SystemError::InitializationFailed => write!(f, "System initialization failed"),
-            SystemError::ServiceUnavailable(service) => write!(f, "Service unavailable: {}", service),
+            SystemError::ServiceUnavailable(service) => {
+                write!(f, "Service unavailable: {}", service)
+            }
             SystemError::LibnxError(code) => write!(f, "Libnx error: {}", code),
             SystemError::InvalidState => write!(f, "Invalid system state"),
         }

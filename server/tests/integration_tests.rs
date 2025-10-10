@@ -10,9 +10,9 @@ mod common;
 
 use common::*;
 use dpstream_server::{
-    streaming::{MoonlightServer, ServerConfig},
-    input::ServerInputManager,
     error::Result,
+    input::ServerInputManager,
+    streaming::{MoonlightServer, ServerConfig},
 };
 
 /// Test server initialization and basic functionality
@@ -120,9 +120,9 @@ async fn test_input_processing() -> Result<()> {
 
     // Simulate controller inputs
     let test_inputs = vec![
-        create_button_input(0x1000, true),  // A button press
-        create_analog_input(-32768, 0),     // Left stick left
-        create_trigger_input(255, 0),       // Left trigger full
+        create_button_input(0x1000, true), // A button press
+        create_analog_input(-32768, 0),    // Left stick left
+        create_trigger_input(255, 0),      // Left trigger full
     ];
 
     for input in test_inputs {
@@ -154,7 +154,8 @@ async fn test_network_resilience() -> Result<()> {
 
     // Continue streaming during network issues
     let test_frames = generate_test_video_frames(1280, 720, 60);
-    for frame in test_frames.into_iter().take(60) { // 1 second worth
+    for frame in test_frames.into_iter().take(60) {
+        // 1 second worth
         test_env.send_video_frame(frame).await?;
         tokio::time::sleep(Duration::from_millis(16)).await; // ~60 FPS
     }
@@ -187,17 +188,20 @@ async fn test_concurrent_clients() -> Result<()> {
     }
 
     // Generate concurrent load
-    let frame_tasks = client_ids.iter().map(|client_id| {
-        let env = test_env.clone();
-        let id = *client_id;
-        tokio::spawn(async move {
-            let frames = generate_test_video_frames(1280, 720, 30);
-            for frame in frames {
-                env.send_video_frame_to_client(&id, frame).await.unwrap();
-                tokio::time::sleep(Duration::from_millis(33)).await; // ~30 FPS
-            }
+    let frame_tasks = client_ids
+        .iter()
+        .map(|client_id| {
+            let env = test_env.clone();
+            let id = *client_id;
+            tokio::spawn(async move {
+                let frames = generate_test_video_frames(1280, 720, 30);
+                for frame in frames {
+                    env.send_video_frame_to_client(&id, frame).await.unwrap();
+                    tokio::time::sleep(Duration::from_millis(33)).await; // ~30 FPS
+                }
+            })
         })
-    }).collect::<Vec<_>>();
+        .collect::<Vec<_>>();
 
     // Wait for all tasks to complete
     for task in frame_tasks {

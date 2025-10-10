@@ -1,21 +1,21 @@
 use std::env;
-use tracing::{info, error, warn, debug};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod emulator;
-mod streaming;
-mod network;
 mod error;
-mod input;
 mod health;
+mod input;
+mod network;
+mod streaming;
 
-use error::{Result, DpstreamError, ErrorReport};
-use network::VpnManager;
-use streaming::{MoonlightServer, ServerConfig, HealthServer};
-use emulator::{DolphinManager, DolphinConfig};
+use emulator::{DolphinConfig, DolphinManager};
+use error::{DpstreamError, ErrorReport, Result};
+use health::{run_health_monitoring, HealthMonitor};
 use input::ServerInputManager;
-use health::{HealthMonitor, run_health_monitoring};
+use network::VpnManager;
 use std::sync::Arc;
+use streaming::{HealthServer, MoonlightServer, ServerConfig};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -82,17 +82,19 @@ async fn main() -> Result<()> {
         report.error
     })?;
 
-    info!("Streaming server initialized on {}:{}", tailscale_ip, streaming_server.port());
+    info!(
+        "Streaming server initialized on {}:{}",
+        tailscale_ip,
+        streaming_server.port()
+    );
 
     // Initialize Dolphin emulator manager
     debug!("Initializing Dolphin emulator manager...");
     let dolphin_config = DolphinConfig {
         executable_path: env::var("DOLPHIN_PATH")
             .unwrap_or_else(|_| "/usr/bin/dolphin-emu".to_string()),
-        rom_directory: env::var("ROM_PATH")
-            .unwrap_or_else(|_| "/srv/games/gc-wii".to_string()),
-        save_directory: env::var("SAVE_PATH")
-            .unwrap_or_else(|_| "/srv/saves".to_string()),
+        rom_directory: env::var("ROM_PATH").unwrap_or_else(|_| "/srv/games/gc-wii".to_string()),
+        save_directory: env::var("SAVE_PATH").unwrap_or_else(|_| "/srv/saves".to_string()),
         window_title: "Dolphin Remote Gaming".to_string(),
         enable_graphics_mods: true,
         enable_netplay: false,
@@ -159,7 +161,6 @@ async fn main() -> Result<()> {
         }
     });
 
-
     // Setup graceful shutdown
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {
@@ -216,7 +217,7 @@ fn init_logging() -> Result<()> {
                 .with_target(true)
                 .with_thread_ids(true)
                 .with_level(true)
-                .compact()
+                .compact(),
         )
         .with(
             tracing_subscriber::fmt::layer()
@@ -225,7 +226,7 @@ fn init_logging() -> Result<()> {
                 })?)
                 .with_target(true)
                 .with_thread_ids(true)
-                .json()
+                .json(),
         )
         .with(tracing_subscriber::EnvFilter::new(&log_level))
         .try_init()
@@ -243,7 +244,8 @@ async fn wait_for_termination() {
     #[cfg(unix)]
     {
         use tokio::signal::unix::{signal, SignalKind};
-        let mut sigterm = signal(SignalKind::terminate()).expect("Failed to create SIGTERM handler");
+        let mut sigterm =
+            signal(SignalKind::terminate()).expect("Failed to create SIGTERM handler");
         let mut sigint = signal(SignalKind::interrupt()).expect("Failed to create SIGINT handler");
 
         tokio::select! {

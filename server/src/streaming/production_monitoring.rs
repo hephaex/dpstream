@@ -3,37 +3,37 @@
 //! Implements comprehensive metrics collection, distributed tracing, health checks,
 //! and performance monitoring for enterprise deployment environments.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Weak};
-use std::sync::atomic::{AtomicU64, AtomicUsize, AtomicBool, Ordering};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use std::net::SocketAddr;
-use uuid::Uuid;
-use serde::{Serialize, Deserialize};
-use cache_padded::CachePadded;
-use parking_lot::{RwLock, Mutex};
-use dashmap::DashMap;
-use tokio::sync::{mpsc, oneshot, broadcast};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::time::{interval, timeout};
-use prometheus::{Registry, Counter, Histogram, Gauge, IntCounter, IntGauge, HistogramOpts, Opts};
 use axum::{
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
     routing::get,
-    response::{Response, IntoResponse},
-    http::{StatusCode, HeaderMap},
     Json, Router,
 };
-use tower::ServiceBuilder;
-use tower_http::trace::TraceLayer;
-use tracing::{debug, info, warn, error, span, Level, Instrument};
-use tracing_opentelemetry::OpenTelemetrySpanExt;
+use cache_padded::CachePadded;
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
 use opentelemetry::{
-    trace::{TraceId, SpanId, TraceContextExt, Tracer},
+    trace::{SpanId, TraceContextExt, TraceId, Tracer},
     Context,
 };
 use opentelemetry_jaeger::JaegerTraceExporter;
-use smallvec::{SmallVec, smallvec};
-use once_cell::sync::Lazy;
+use parking_lot::{Mutex, RwLock};
+use prometheus::{Counter, Gauge, Histogram, HistogramOpts, IntCounter, IntGauge, Opts, Registry};
+use serde::{Deserialize, Serialize};
+use smallvec::{smallvec, SmallVec};
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Weak};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::time::{interval, timeout};
+use tower::ServiceBuilder;
+use tower_http::trace::TraceLayer;
+use tracing::{debug, error, info, span, warn, Instrument, Level};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+use uuid::Uuid;
 
 /// Production monitoring system with enterprise observability
 pub struct ProductionMonitoringSystem {
@@ -471,7 +471,9 @@ impl ProductionMonitoringSystem {
     }
 
     /// Initialize distributed tracing
-    async fn init_tracing(config: &MonitoringConfig) -> Result<Arc<dyn Tracer + Send + Sync>, MonitoringError> {
+    async fn init_tracing(
+        config: &MonitoringConfig,
+    ) -> Result<Arc<dyn Tracer + Send + Sync>, MonitoringError> {
         if let Some(jaeger_endpoint) = &config.jaeger_endpoint {
             let tracer = opentelemetry_jaeger::new_agent_pipeline()
                 .with_service_name("dpstream")
@@ -487,61 +489,105 @@ impl ProductionMonitoringSystem {
     }
 
     /// Create application metrics
-    fn create_application_metrics(registry: &Registry) -> Result<ApplicationMetrics, MonitoringError> {
+    fn create_application_metrics(
+        registry: &Registry,
+    ) -> Result<ApplicationMetrics, MonitoringError> {
         let metrics = ApplicationMetrics {
             // Session metrics
-            active_sessions: IntGauge::new("dpstream_active_sessions", "Number of active streaming sessions")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            total_sessions: IntCounter::new("dpstream_total_sessions", "Total number of streaming sessions")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            active_sessions: IntGauge::new(
+                "dpstream_active_sessions",
+                "Number of active streaming sessions",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            total_sessions: IntCounter::new(
+                "dpstream_total_sessions",
+                "Total number of streaming sessions",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             session_duration: Histogram::with_opts(
                 HistogramOpts::new("dpstream_session_duration", "Session duration in seconds")
-                    .buckets(vec![1.0, 5.0, 10.0, 30.0, 60.0, 300.0, 900.0, 1800.0, 3600.0])
-            ).map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+                    .buckets(vec![
+                        1.0, 5.0, 10.0, 30.0, 60.0, 300.0, 900.0, 1800.0, 3600.0,
+                    ]),
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             session_errors: IntCounter::new("dpstream_session_errors", "Number of session errors")
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
 
             // Video metrics
-            frames_processed: IntCounter::new("dpstream_frames_processed", "Total frames processed")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            frames_processed: IntCounter::new(
+                "dpstream_frames_processed",
+                "Total frames processed",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             frame_processing_time: Histogram::with_opts(
-                HistogramOpts::new("dpstream_frame_processing_time", "Frame processing time in microseconds")
-                    .buckets(vec![100.0, 500.0, 1000.0, 5000.0, 10000.0, 50000.0, 100000.0])
-            ).map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+                HistogramOpts::new(
+                    "dpstream_frame_processing_time",
+                    "Frame processing time in microseconds",
+                )
+                .buckets(vec![
+                    100.0, 500.0, 1000.0, 5000.0, 10000.0, 50000.0, 100000.0,
+                ]),
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             video_bitrate: Gauge::new("dpstream_video_bitrate", "Current video bitrate in kbps")
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            video_quality_score: Gauge::new("dpstream_video_quality_score", "Video quality score (0-1)")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            video_quality_score: Gauge::new(
+                "dpstream_video_quality_score",
+                "Video quality score (0-1)",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             encoding_errors: IntCounter::new("dpstream_encoding_errors", "Video encoding errors")
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
 
             // Audio metrics
-            audio_samples_processed: IntCounter::new("dpstream_audio_samples_processed", "Total audio samples processed")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            audio_samples_processed: IntCounter::new(
+                "dpstream_audio_samples_processed",
+                "Total audio samples processed",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             audio_processing_time: Histogram::with_opts(
-                HistogramOpts::new("dpstream_audio_processing_time", "Audio processing time in microseconds")
-                    .buckets(vec![10.0, 50.0, 100.0, 500.0, 1000.0, 5000.0, 10000.0])
-            ).map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+                HistogramOpts::new(
+                    "dpstream_audio_processing_time",
+                    "Audio processing time in microseconds",
+                )
+                .buckets(vec![10.0, 50.0, 100.0, 500.0, 1000.0, 5000.0, 10000.0]),
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             audio_latency: Histogram::with_opts(
                 HistogramOpts::new("dpstream_audio_latency", "Audio latency in milliseconds")
-                    .buckets(vec![1.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0])
-            ).map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+                    .buckets(vec![1.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0]),
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             audio_dropouts: IntCounter::new("dpstream_audio_dropouts", "Number of audio dropouts")
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
 
             // Network metrics
             packets_sent: IntCounter::new("dpstream_packets_sent", "Total packets sent")
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            packets_received: IntCounter::new("dpstream_packets_received", "Total packets received")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            bytes_transmitted: IntCounter::new("dpstream_bytes_transmitted", "Total bytes transmitted")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            packets_received: IntCounter::new(
+                "dpstream_packets_received",
+                "Total packets received",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            bytes_transmitted: IntCounter::new(
+                "dpstream_bytes_transmitted",
+                "Total bytes transmitted",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             network_latency: Histogram::with_opts(
-                HistogramOpts::new("dpstream_network_latency", "Network latency in milliseconds")
-                    .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0])
-            ).map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            packet_loss_rate: Gauge::new("dpstream_packet_loss_rate", "Packet loss rate percentage")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+                HistogramOpts::new(
+                    "dpstream_network_latency",
+                    "Network latency in milliseconds",
+                )
+                .buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0]),
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            packet_loss_rate: Gauge::new(
+                "dpstream_packet_loss_rate",
+                "Packet loss rate percentage",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
 
             // System metrics
             cpu_usage: Gauge::new("dpstream_cpu_usage", "CPU usage percentage")
@@ -550,14 +596,18 @@ impl ProductionMonitoringSystem {
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             disk_usage: Gauge::new("dpstream_disk_usage", "Disk usage percentage")
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            network_utilization: Gauge::new("dpstream_network_utilization", "Network utilization percentage")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            network_utilization: Gauge::new(
+                "dpstream_network_utilization",
+                "Network utilization percentage",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
 
             // Performance metrics
             request_duration: Histogram::with_opts(
                 HistogramOpts::new("dpstream_request_duration", "Request duration in seconds")
-                    .buckets(vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0])
-            ).map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+                    .buckets(vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0]),
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             request_rate: Gauge::new("dpstream_request_rate", "Request rate per second")
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             error_rate: Gauge::new("dpstream_error_rate", "Error rate percentage")
@@ -566,54 +616,87 @@ impl ProductionMonitoringSystem {
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
 
             // Zero-copy optimization metrics
-            buffer_pool_hits: IntCounter::new("dpstream_buffer_pool_hits", "Buffer pool cache hits")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            buffer_pool_misses: IntCounter::new("dpstream_buffer_pool_misses", "Buffer pool cache misses")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            buffer_pool_utilization: Gauge::new("dpstream_buffer_pool_utilization", "Buffer pool utilization percentage")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            simd_operations: IntCounter::new("dpstream_simd_operations", "SIMD operations performed")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            simd_utilization_rate: Gauge::new("dpstream_simd_utilization_rate", "SIMD utilization rate percentage")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            buffer_pool_hits: IntCounter::new(
+                "dpstream_buffer_pool_hits",
+                "Buffer pool cache hits",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            buffer_pool_misses: IntCounter::new(
+                "dpstream_buffer_pool_misses",
+                "Buffer pool cache misses",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            buffer_pool_utilization: Gauge::new(
+                "dpstream_buffer_pool_utilization",
+                "Buffer pool utilization percentage",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            simd_operations: IntCounter::new(
+                "dpstream_simd_operations",
+                "SIMD operations performed",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            simd_utilization_rate: Gauge::new(
+                "dpstream_simd_utilization_rate",
+                "SIMD utilization rate percentage",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
 
             // Error recovery metrics
             errors_detected: IntCounter::new("dpstream_errors_detected", "Total errors detected")
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             recovery_attempts: IntCounter::new("dpstream_recovery_attempts", "Recovery attempts")
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            successful_recoveries: IntCounter::new("dpstream_successful_recoveries", "Successful recoveries")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            successful_recoveries: IntCounter::new(
+                "dpstream_successful_recoveries",
+                "Successful recoveries",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
             failed_recoveries: IntCounter::new("dpstream_failed_recoveries", "Failed recoveries")
                 .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
-            circuit_breaker_trips: IntCounter::new("dpstream_circuit_breaker_trips", "Circuit breaker trips")
-                .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
+            circuit_breaker_trips: IntCounter::new(
+                "dpstream_circuit_breaker_trips",
+                "Circuit breaker trips",
+            )
+            .map_err(|e| MonitoringError::MetricCreationFailed(e.to_string()))?,
         };
 
         // Register all metrics with the registry
-        registry.register(Box::new(metrics.active_sessions.clone()))
+        registry
+            .register(Box::new(metrics.active_sessions.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
-        registry.register(Box::new(metrics.total_sessions.clone()))
+        registry
+            .register(Box::new(metrics.total_sessions.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
-        registry.register(Box::new(metrics.session_duration.clone()))
+        registry
+            .register(Box::new(metrics.session_duration.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
-        registry.register(Box::new(metrics.frames_processed.clone()))
+        registry
+            .register(Box::new(metrics.frames_processed.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
-        registry.register(Box::new(metrics.frame_processing_time.clone()))
+        registry
+            .register(Box::new(metrics.frame_processing_time.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
-        registry.register(Box::new(metrics.video_bitrate.clone()))
+        registry
+            .register(Box::new(metrics.video_bitrate.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
-        registry.register(Box::new(metrics.network_latency.clone()))
+        registry
+            .register(Box::new(metrics.network_latency.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
-        registry.register(Box::new(metrics.cpu_usage.clone()))
+        registry
+            .register(Box::new(metrics.cpu_usage.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
-        registry.register(Box::new(metrics.memory_usage.clone()))
+        registry
+            .register(Box::new(metrics.memory_usage.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
-        registry.register(Box::new(metrics.buffer_pool_hits.clone()))
+        registry
+            .register(Box::new(metrics.buffer_pool_hits.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
-        registry.register(Box::new(metrics.simd_operations.clone()))
+        registry
+            .register(Box::new(metrics.simd_operations.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
-        registry.register(Box::new(metrics.errors_detected.clone()))
+        registry
+            .register(Box::new(metrics.errors_detected.clone()))
             .map_err(|e| MonitoringError::MetricRegistrationFailed(e.to_string()))?;
 
         Ok(metrics)
@@ -719,7 +802,8 @@ impl ProductionMonitoringSystem {
                     history.push_back(snapshot);
 
                     // Limit history size
-                    while history.len() > 3600 { // Keep 1 hour of data at 1-second intervals
+                    while history.len() > 3600 {
+                        // Keep 1 hour of data at 1-second intervals
                         history.pop_front();
                     }
                 }
@@ -783,22 +867,34 @@ impl ProductionMonitoringSystem {
                 // Update system resource metrics
                 // CPU usage (simplified - would use platform-specific APIs)
                 let cpu_usage = Self::get_cpu_usage();
-                resource_monitor.cpu_monitor.usage_percent.store(
-                    (cpu_usage * 100.0) as u64,
-                    Ordering::Relaxed,
-                );
+                resource_monitor
+                    .cpu_monitor
+                    .usage_percent
+                    .store((cpu_usage * 100.0) as u64, Ordering::Relaxed);
                 app_metrics.cpu_usage.set(cpu_usage);
 
                 // Memory usage (simplified)
                 let memory_info = Self::get_memory_info();
-                resource_monitor.memory_monitor.used_memory.store(memory_info.0, Ordering::Relaxed);
-                resource_monitor.memory_monitor.available_memory.store(memory_info.1, Ordering::Relaxed);
+                resource_monitor
+                    .memory_monitor
+                    .used_memory
+                    .store(memory_info.0, Ordering::Relaxed);
+                resource_monitor
+                    .memory_monitor
+                    .available_memory
+                    .store(memory_info.1, Ordering::Relaxed);
                 app_metrics.memory_usage.set(memory_info.0 as f64);
 
                 // Network stats (simplified)
                 let network_stats = Self::get_network_stats();
-                resource_monitor.network_monitor.bytes_sent.store(network_stats.0, Ordering::Relaxed);
-                resource_monitor.network_monitor.bytes_received.store(network_stats.1, Ordering::Relaxed);
+                resource_monitor
+                    .network_monitor
+                    .bytes_sent
+                    .store(network_stats.0, Ordering::Relaxed);
+                resource_monitor
+                    .network_monitor
+                    .bytes_received
+                    .store(network_stats.1, Ordering::Relaxed);
 
                 debug!("Updated resource monitoring metrics");
             }
@@ -819,17 +915,15 @@ impl ProductionMonitoringSystem {
                 let history = performance_collector.performance_history.read();
                 if history.len() > 10 {
                     // Analyze CPU usage trend
-                    let cpu_values: Vec<f64> = history.iter()
-                        .rev()
-                        .take(10)
-                        .map(|s| s.cpu_usage)
-                        .collect();
+                    let cpu_values: Vec<f64> =
+                        history.iter().rev().take(10).map(|s| s.cpu_usage).collect();
 
                     let trend = Self::calculate_trend(&cpu_values);
                     debug!("CPU usage trend: {:?}", trend);
 
                     // Analyze latency trend
-                    let latency_values: Vec<f64> = history.iter()
+                    let latency_values: Vec<f64> = history
+                        .iter()
                         .rev()
                         .take(10)
                         .map(|s| s.latency_ms)
@@ -873,57 +967,76 @@ impl ProductionMonitoringSystem {
         let endpoint = self.config.metrics_endpoint.clone();
 
         let app = Router::new()
-            .route("/metrics", get(move || async move {
-                let encoder = prometheus::TextEncoder::new();
-                let metric_families = registry.gather();
-                match encoder.encode_to_string(&metric_families) {
-                    Ok(output) => {
-                        let mut headers = HeaderMap::new();
-                        headers.insert("content-type", "text/plain; version=0.0.4".parse().unwrap());
-                        (StatusCode::OK, headers, output)
+            .route(
+                "/metrics",
+                get(move || async move {
+                    let encoder = prometheus::TextEncoder::new();
+                    let metric_families = registry.gather();
+                    match encoder.encode_to_string(&metric_families) {
+                        Ok(output) => {
+                            let mut headers = HeaderMap::new();
+                            headers.insert(
+                                "content-type",
+                                "text/plain; version=0.0.4".parse().unwrap(),
+                            );
+                            (StatusCode::OK, headers, output)
+                        }
+                        Err(e) => {
+                            error!("Failed to encode metrics: {}", e);
+                            (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                HeaderMap::new(),
+                                "Failed to encode metrics".to_string(),
+                            )
+                        }
                     }
-                    Err(e) => {
-                        error!("Failed to encode metrics: {}", e);
-                        (StatusCode::INTERNAL_SERVER_ERROR, HeaderMap::new(), "Failed to encode metrics".to_string())
-                    }
-                }
-            }))
-            .route("/health", get({
-                let health_checks = health_checks.clone();
-                move || async move {
-                    let mut overall_status = StatusCode::OK;
-                    let mut health_results = HashMap::new();
+                }),
+            )
+            .route(
+                "/health",
+                get({
+                    let health_checks = health_checks.clone();
+                    move || async move {
+                        let mut overall_status = StatusCode::OK;
+                        let mut health_results = HashMap::new();
 
-                    for entry in health_checks.iter() {
-                        let check_name = entry.key().clone();
-                        let health_check = entry.value();
+                        for entry in health_checks.iter() {
+                            let check_name = entry.key().clone();
+                            let health_check = entry.value();
 
-                        let result = health_check.check();
-                        match result {
-                            HealthCheckResult::Unhealthy { .. } if health_check.is_critical() => {
-                                overall_status = StatusCode::SERVICE_UNAVAILABLE;
-                            }
-                            HealthCheckResult::Unhealthy { .. } => {
-                                if overall_status == StatusCode::OK {
-                                    overall_status = StatusCode::PARTIAL_CONTENT;
+                            let result = health_check.check();
+                            match result {
+                                HealthCheckResult::Unhealthy { .. }
+                                    if health_check.is_critical() =>
+                                {
+                                    overall_status = StatusCode::SERVICE_UNAVAILABLE;
                                 }
+                                HealthCheckResult::Unhealthy { .. } => {
+                                    if overall_status == StatusCode::OK {
+                                        overall_status = StatusCode::PARTIAL_CONTENT;
+                                    }
+                                }
+                                _ => {}
                             }
-                            _ => {}
+
+                            health_results.insert(check_name, result);
                         }
 
-                        health_results.insert(check_name, result);
+                        (overall_status, Json(health_results))
                     }
-
-                    (overall_status, Json(health_results))
-                }
-            }))
-            .route("/ready", get(|| async {
-                // Simple readiness check
-                StatusCode::OK
-            }))
+                }),
+            )
+            .route(
+                "/ready",
+                get(|| async {
+                    // Simple readiness check
+                    StatusCode::OK
+                }),
+            )
             .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
-        let listener = TcpListener::bind(&endpoint).await
+        let listener = TcpListener::bind(&endpoint)
+            .await
             .map_err(|e| MonitoringError::ServerStartFailed(e.to_string()))?;
 
         let server_task = tokio::spawn(async move {
@@ -975,7 +1088,12 @@ impl ProductionMonitoringSystem {
 
     /// Get performance history
     pub fn get_performance_history(&self) -> Vec<PerformanceSnapshot> {
-        self.performance_collector.performance_history.read().iter().cloned().collect()
+        self.performance_collector
+            .performance_history
+            .read()
+            .iter()
+            .cloned()
+            .collect()
     }
 
     /// Shutdown monitoring system
@@ -1055,15 +1173,24 @@ mod tests {
     fn test_trend_calculation() {
         // Increasing trend
         let increasing = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-        assert_eq!(ProductionMonitoringSystem::calculate_trend(&increasing), TrendDirection::Increasing);
+        assert_eq!(
+            ProductionMonitoringSystem::calculate_trend(&increasing),
+            TrendDirection::Increasing
+        );
 
         // Decreasing trend
         let decreasing = vec![5.0, 4.0, 3.0, 2.0, 1.0];
-        assert_eq!(ProductionMonitoringSystem::calculate_trend(&decreasing), TrendDirection::Decreasing);
+        assert_eq!(
+            ProductionMonitoringSystem::calculate_trend(&decreasing),
+            TrendDirection::Decreasing
+        );
 
         // Stable trend
         let stable = vec![2.0, 2.1, 1.9, 2.0, 2.1];
-        assert_eq!(ProductionMonitoringSystem::calculate_trend(&stable), TrendDirection::Stable);
+        assert_eq!(
+            ProductionMonitoringSystem::calculate_trend(&stable),
+            TrendDirection::Stable
+        );
     }
 
     struct TestHealthCheck {

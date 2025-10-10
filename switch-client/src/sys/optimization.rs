@@ -4,16 +4,16 @@
 
 #![no_std]
 
-use alloc::vec::Vec;
+use crate::error::{MemoryError, Result};
 use alloc::collections::VecDeque;
-use core::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
-use core::ptr::NonNull;
-use heapless::Vec as HeaplessVec;
-use tinyvec::TinyVec;
-use spin::{Mutex, RwLock};
+use alloc::vec::Vec;
 use cache_padded::CachePadded;
+use core::ptr::NonNull;
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use heapless::Vec as HeaplessVec;
 use once_cell::race::OnceNonZeroUsize;
-use crate::error::{Result, MemoryError};
+use spin::{Mutex, RwLock};
+use tinyvec::TinyVec;
 
 /// Cache-optimized lock-free ring buffer for high-performance frame streaming
 #[repr(align(64))] // Cache line alignment
@@ -112,9 +112,9 @@ pub struct OptimizedFramePool {
 #[derive(Debug, Clone)]
 pub struct SwitchPerformanceMetrics {
     pub frame_decode_time_us: u32,
-    pub memory_pressure: u8,      // 0-100 percentage
-    pub cpu_temperature: u8,      // Temperature in Celsius
-    pub gpu_frequency_mhz: u16,   // Current GPU frequency
+    pub memory_pressure: u8,       // 0-100 percentage
+    pub cpu_temperature: u8,       // Temperature in Celsius
+    pub gpu_frequency_mhz: u16,    // Current GPU frequency
     pub memory_frequency_mhz: u16, // Current memory frequency
     pub power_consumption_mw: u16, // Power consumption in milliwatts
 }
@@ -228,7 +228,12 @@ impl AdaptiveQualityController {
         }
     }
 
-    pub fn update_metrics(&self, memory_usage_percent: f32, cpu_usage_percent: f32, timestamp: usize) {
+    pub fn update_metrics(
+        &self,
+        memory_usage_percent: f32,
+        cpu_usage_percent: f32,
+        timestamp: usize,
+    ) {
         let last_adjustment = self.last_adjustment.load(Ordering::Relaxed);
 
         // Only adjust every ~2 seconds (assuming timestamp is in ms)
@@ -240,8 +245,9 @@ impl AdaptiveQualityController {
         let mut new_quality = current_quality;
 
         // Decrease quality if under pressure
-        if memory_usage_percent > self.memory_pressure_threshold ||
-           cpu_usage_percent > self.cpu_usage_threshold {
+        if memory_usage_percent > self.memory_pressure_threshold
+            || cpu_usage_percent > self.cpu_usage_threshold
+        {
             new_quality = new_quality.saturating_sub(10);
         }
         // Increase quality if resources are available
@@ -275,10 +281,10 @@ impl AdaptiveQualityController {
 
         // Drop lower priority frames based on quality setting
         match quality {
-            0..=25 => frame_priority < 7,    // Only keep critical frames
-            26..=50 => frame_priority < 5,   // Keep high and critical
-            51..=75 => frame_priority < 3,   // Keep normal, high, and critical
-            _ => false,                      // Keep all frames
+            0..=25 => frame_priority < 7,  // Only keep critical frames
+            26..=50 => frame_priority < 5, // Keep high and critical
+            51..=75 => frame_priority < 3, // Keep normal, high, and critical
+            _ => false,                    // Keep all frames
         }
     }
 }
@@ -307,7 +313,7 @@ impl SIMDOptimizations {
         for i in 0..pixels {
             let y = yuv_data[i] as i32;
             let u = yuv_data[pixels + i / 4] as i32 - 128;
-            let v = yuv_data[pixels + pixels/4 + i / 4] as i32 - 128;
+            let v = yuv_data[pixels + pixels / 4 + i / 4] as i32 - 128;
 
             let r = (y + (1.370705 * v as f32) as i32).clamp(0, 255);
             let g = (y - (0.698001 * v as f32) as i32 - (0.337633 * u as f32) as i32).clamp(0, 255);

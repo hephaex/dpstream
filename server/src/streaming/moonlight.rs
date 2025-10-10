@@ -3,22 +3,22 @@
 //! Implements NVIDIA GameStream compatible streaming protocol for video and audio
 
 use crate::error::{Result, StreamingError};
-use crate::streaming::capture::{VideoFrame, VideoCapture, VideoCaptureConfig};
-use crate::input::{MoonlightInputPacket, ServerInputManager};
 use crate::health::HealthMonitor;
-use dashmap::DashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use parking_lot::RwLock;
-use cache_padded::CachePadded;
-use once_cell::sync::Lazy;
+use crate::input::{MoonlightInputPacket, ServerInputManager};
+use crate::streaming::capture::{VideoCapture, VideoCaptureConfig, VideoFrame};
 use ahash::AHashMap;
 use bumpalo::Bump;
-use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use flume::{Sender, Receiver, bounded, unbounded};
+use cache_padded::CachePadded;
+use dashmap::DashMap;
+use flume::{bounded, unbounded, Receiver, Sender};
+use once_cell::sync::Lazy;
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use tracing::{info, debug, error, warn};
-use serde::{Serialize, Deserialize};
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::net::{TcpListener, TcpStream, UdpSocket};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Moonlight streaming server with optimized concurrent access
@@ -168,13 +168,29 @@ pub struct StreamStats {
 /// Input events from client
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InputEvent {
-    KeyDown { key: u32 },
-    KeyUp { key: u32 },
-    MouseMove { x: i32, y: i32 },
-    MouseDown { button: u8 },
-    MouseUp { button: u8 },
-    MouseWheel { delta: i32 },
-    ControllerInput { controller_id: u8, input: ControllerInput },
+    KeyDown {
+        key: u32,
+    },
+    KeyUp {
+        key: u32,
+    },
+    MouseMove {
+        x: i32,
+        y: i32,
+    },
+    MouseDown {
+        button: u8,
+    },
+    MouseUp {
+        button: u8,
+    },
+    MouseWheel {
+        delta: i32,
+    },
+    ControllerInput {
+        controller_id: u8,
+        input: ControllerInput,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,7 +225,6 @@ pub struct NegotiatedStreamConfig {
 }
 
 impl MoonlightServer {
-
     /// Start the Moonlight server
     pub async fn start(&mut self) -> Result<()> {
         info!("Starting Moonlight server");
@@ -217,27 +232,29 @@ impl MoonlightServer {
         *self.is_running.lock().unwrap() = true;
 
         let bind_addr = format!("{}:{}", self.config.bind_addr, self.config.port);
-        let listen_addr: SocketAddr = bind_addr.parse()
-            .map_err(|e| StreamingError::CaptureInitFailed(format!("Invalid bind address: {}", e)))?;
+        let listen_addr: SocketAddr = bind_addr.parse().map_err(|e| {
+            StreamingError::CaptureInitFailed(format!("Invalid bind address: {}", e))
+        })?;
 
         // Start TCP listener for control connections
-        let control_listener = TcpListener::bind(listen_addr).await
-            .map_err(|e| StreamingError::FrameProcessingFailed {
-                reason: format!("Failed to bind control listener: {}", e)
-            })?;
+        let control_listener = TcpListener::bind(listen_addr).await.map_err(|e| {
+            StreamingError::FrameProcessingFailed {
+                reason: format!("Failed to bind control listener: {}", e),
+            }
+        })?;
 
         // Start UDP socket for video/audio streaming
-        let stream_addr = SocketAddr::new(
-            listen_addr.ip(),
-            listen_addr.port() + 1
-        );
-        let stream_socket = UdpSocket::bind(stream_addr).await
-            .map_err(|e| StreamingError::FrameProcessingFailed {
-                reason: format!("Failed to bind stream socket: {}", e)
-            })?;
+        let stream_addr = SocketAddr::new(listen_addr.ip(), listen_addr.port() + 1);
+        let stream_socket = UdpSocket::bind(stream_addr).await.map_err(|e| {
+            StreamingError::FrameProcessingFailed {
+                reason: format!("Failed to bind stream socket: {}", e),
+            }
+        })?;
 
-        info!("Moonlight server listening on {} (control) and {} (stream)",
-              listen_addr, stream_addr);
+        info!(
+            "Moonlight server listening on {} (control) and {} (stream)",
+            listen_addr, stream_addr
+        );
 
         // Start control connection handler
         let sessions = Arc::clone(&self.sessions);
@@ -254,7 +271,8 @@ impl MoonlightServer {
                 config,
                 video_broadcast,
                 audio_broadcast,
-            ).await;
+            )
+            .await;
         });
 
         // Start stream data handler
@@ -262,11 +280,7 @@ impl MoonlightServer {
         let is_running_clone = Arc::clone(&self.is_running);
 
         tokio::spawn(async move {
-            Self::handle_stream_data(
-                stream_socket,
-                sessions_clone,
-                is_running_clone,
-            ).await;
+            Self::handle_stream_data(stream_socket, sessions_clone, is_running_clone).await;
         });
 
         info!("Moonlight server started successfully");
@@ -317,10 +331,10 @@ impl MoonlightServer {
     pub async fn new(config: ServerConfig) -> Result<Self> {
         let bind_addr = format!("{}:{}", config.bind_addr, config.port);
         info!("Initializing Moonlight server on {}", bind_addr);
-        debug!("Max clients: {}, encryption: {}, auth: {}",
-               config.max_clients,
-               config.enable_encryption,
-               config.enable_authentication);
+        debug!(
+            "Max clients: {}, encryption: {}, auth: {}",
+            config.max_clients, config.enable_encryption, config.enable_authentication
+        );
 
         let (video_broadcast, _) = bounded(1024);
         let (audio_broadcast, _) = bounded(1024);
@@ -353,7 +367,11 @@ impl MoonlightServer {
     }
 
     /// Convert ControllerInput to MoonlightInputPacket
-    fn convert_controller_input_to_moonlight(&self, controller_id: u8, input: ControllerInput) -> MoonlightInputPacket {
+    fn convert_controller_input_to_moonlight(
+        &self,
+        controller_id: u8,
+        input: ControllerInput,
+    ) -> MoonlightInputPacket {
         MoonlightInputPacket {
             packet_type: 0x0C, // Controller input packet type
             button_flags: input.buttons as u16,
@@ -392,7 +410,8 @@ impl MoonlightServer {
     /// Get server statistics
     pub fn get_stats(&self) -> ServerStats {
         let sessions = self.sessions.lock().unwrap();
-        let active_sessions = sessions.values()
+        let active_sessions = sessions
+            .values()
             .filter(|s| s.state == SessionState::Streaming)
             .count();
 
@@ -401,7 +420,11 @@ impl MoonlightServer {
             total_sessions: sessions.len(),
             is_running: *self.is_running.lock().unwrap(),
             uptime: std::time::Instant::now().duration_since(
-                sessions.values().map(|s| s.started_at).min().unwrap_or(std::time::Instant::now())
+                sessions
+                    .values()
+                    .map(|s| s.started_at)
+                    .min()
+                    .unwrap_or(std::time::Instant::now()),
             ),
         }
     }
@@ -459,7 +482,9 @@ impl MoonlightServer {
                             config_clone,
                             video_broadcast_clone,
                             audio_broadcast_clone,
-                        ).await {
+                        )
+                        .await
+                        {
                             error!("Client session error for {}: {}", addr, e);
                         }
                     });
@@ -496,7 +521,10 @@ impl MoonlightServer {
         // Step 1: RTSP handshake for session negotiation
         let handshake_result = Self::perform_rtsp_handshake(&mut stream, &config).await;
         if handshake_result.is_err() {
-            warn!("RTSP handshake failed for session {}: {:?}", session_id, handshake_result);
+            warn!(
+                "RTSP handshake failed for session {}: {:?}",
+                session_id, handshake_result
+            );
             return handshake_result;
         }
 
@@ -673,7 +701,10 @@ impl MoonlightServer {
     }
 
     /// Exchange capabilities with the client
-    async fn exchange_capabilities(stream: &mut TcpStream, config: &ServerConfig) -> Result<ClientCapabilities> {
+    async fn exchange_capabilities(
+        stream: &mut TcpStream,
+        config: &ServerConfig,
+    ) -> Result<ClientCapabilities> {
         debug!("Exchanging capabilities");
 
         // In a real implementation, this would parse client capabilities and respond with server capabilities
@@ -699,7 +730,10 @@ impl MoonlightServer {
     }
 
     /// Negotiate stream configuration with client
-    async fn negotiate_stream_config(stream: &mut TcpStream, capabilities: ClientCapabilities) -> Result<NegotiatedStreamConfig> {
+    async fn negotiate_stream_config(
+        stream: &mut TcpStream,
+        capabilities: ClientCapabilities,
+    ) -> Result<NegotiatedStreamConfig> {
         debug!("Negotiating stream configuration");
 
         // In a real implementation, this would negotiate optimal settings based on capabilities
@@ -713,10 +747,17 @@ impl MoonlightServer {
     }
 
     /// Send video frame to specific client
-    async fn send_video_frame_to_client(&self, frame: &Option<VideoFrame>, session_id: &Uuid) -> Result<()> {
+    async fn send_video_frame_to_client(
+        &self,
+        frame: &Option<VideoFrame>,
+        session_id: &Uuid,
+    ) -> Result<()> {
         if let Some(frame) = frame {
             // In a real implementation, this would encode the frame and send via UDP
-            debug!("Sending video frame {} to client {}", frame.frame_number, session_id);
+            debug!(
+                "Sending video frame {} to client {}",
+                frame.frame_number, session_id
+            );
 
             // TODO: Implement actual H264 encoding and UDP transmission
             // This would involve:
@@ -728,9 +769,16 @@ impl MoonlightServer {
     }
 
     /// Send audio frame to specific client
-    async fn send_audio_frame_to_client(&self, frame: &Option<AudioFrame>, session_id: &Uuid) -> Result<()> {
+    async fn send_audio_frame_to_client(
+        &self,
+        frame: &Option<AudioFrame>,
+        session_id: &Uuid,
+    ) -> Result<()> {
         if let Some(frame) = frame {
-            debug!("Sending audio frame ({}ms) to client {}", frame.timestamp, session_id);
+            debug!(
+                "Sending audio frame ({}ms) to client {}",
+                frame.timestamp, session_id
+            );
 
             // TODO: Implement actual audio encoding and UDP transmission
             // This would involve:
@@ -762,7 +810,10 @@ impl MoonlightServer {
                 debug!("Received keepalive from client {}", session_id);
             }
             _ => {
-                debug!("Unknown control message type: 0x{:02X} from client {}", msg_type, session_id);
+                debug!(
+                    "Unknown control message type: 0x{:02X} from client {}",
+                    msg_type, session_id
+                );
             }
         }
 
@@ -789,7 +840,12 @@ impl MoonlightServer {
             // Send to input manager if available
             if let Some(input_manager) = self.input_manager.lock().unwrap().as_mut() {
                 // Register client if not already registered
-                if !input_manager.sessions.lock().unwrap().contains_key(session_id) {
+                if !input_manager
+                    .sessions
+                    .lock()
+                    .unwrap()
+                    .contains_key(session_id)
+                {
                     let _sender = input_manager.register_client(*session_id)?;
                 }
 
@@ -814,7 +870,7 @@ pub struct ServerStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::streaming::capture::{VideoEncoder, QualityPreset};
+    use crate::streaming::capture::{QualityPreset, VideoEncoder};
 
     fn create_test_config() -> ServerConfig {
         ServerConfig {

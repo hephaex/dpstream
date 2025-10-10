@@ -1,10 +1,10 @@
-use tokio::process::{Child, Command};
+use crate::error::{EmulatorError, Result};
 use std::env;
 use std::path::Path;
 use std::time::{Duration, Instant};
+use tokio::process::{Child, Command};
 use tokio::time::timeout;
-use tracing::{info, warn, error, debug};
-use crate::error::{Result, EmulatorError};
+use tracing::{debug, error, info, warn};
 
 /// Dolphin emulator configuration
 #[derive(Debug, Clone)]
@@ -35,14 +35,15 @@ impl DolphinManager {
             env::var("DOLPHIN_STARTUP_TIMEOUT")
                 .ok()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or(30)
+                .unwrap_or(30),
         );
 
         // Verify Dolphin executable exists
         if !Path::new(&config.executable_path).exists() {
             return Err(EmulatorError::ExecutableNotFound {
-                path: config.executable_path.clone()
-            }.into());
+                path: config.executable_path.clone(),
+            }
+            .into());
         }
 
         // Create necessary directories
@@ -80,20 +81,19 @@ impl DolphinManager {
 
         let mut cmd = Command::new(&self.config.executable_path);
         cmd.arg("--exec")
-           .arg(&rom_path)
-           .arg("--nogui")
-           .arg("--save")
-           .arg(&self.config.save_directory)
-           .arg("--audio-backend")
-           .arg(&self.config.audio_backend)
-           .arg("--video-backend")
-           .arg(&self.config.video_backend)
-           .kill_on_drop(true);
+            .arg(&rom_path)
+            .arg("--nogui")
+            .arg("--save")
+            .arg(&self.config.save_directory)
+            .arg("--audio-backend")
+            .arg(&self.config.audio_backend)
+            .arg("--video-backend")
+            .arg(&self.config.video_backend)
+            .kill_on_drop(true);
 
-        let child = cmd.spawn()
-            .map_err(|e| EmulatorError::StartupFailed {
-                reason: format!("Failed to spawn Dolphin process: {}", e)
-            })?;
+        let child = cmd.spawn().map_err(|e| EmulatorError::StartupFailed {
+            reason: format!("Failed to spawn Dolphin process: {}", e),
+        })?;
 
         let pid = child.id();
         info!("Dolphin process started with PID: {}", pid.unwrap_or(0));
@@ -115,7 +115,8 @@ impl DolphinManager {
             }
 
             Ok::<(), crate::error::DpstreamError>(())
-        }).await;
+        })
+        .await;
 
         match startup_result {
             Ok(Ok(())) => {
@@ -155,7 +156,8 @@ impl DolphinManager {
                 Err(e) => Err(EmulatorError::ProcessControlFailed {
                     operation: "kill".to_string(),
                     reason: e.to_string(),
-                }.into()),
+                }
+                .into()),
             }
         } else {
             debug!("Dolphin process already stopped");
@@ -197,7 +199,10 @@ impl DolphinManager {
         let wait_time = Duration::from_millis(500);
 
         for attempt in 1..=attempts {
-            debug!("Searching for Dolphin window, attempt {}/{}", attempt, attempts);
+            debug!(
+                "Searching for Dolphin window, attempt {}/{}",
+                attempt, attempts
+            );
 
             // Mock implementation for now - in real implementation, this would:
             // 1. Connect to X11 display
@@ -218,7 +223,8 @@ impl DolphinManager {
 
         Err(EmulatorError::WindowNotFound {
             timeout: Duration::from_millis(wait_time.as_millis() as u64 * attempts),
-        }.into())
+        }
+        .into())
     }
 
     async fn start_process_monitor(&mut self) -> Result<()> {
@@ -226,7 +232,8 @@ impl DolphinManager {
             return Err(EmulatorError::ProcessControlFailed {
                 operation: "monitor".to_string(),
                 reason: "No process to monitor".to_string(),
-            }.into());
+            }
+            .into());
         }
 
         // Create a monitoring task
@@ -294,8 +301,8 @@ impl Drop for DolphinManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio_test;
     use std::env;
+    use tokio_test;
 
     fn setup_test_env() {
         env::set_var("DOLPHIN_PATH", "/usr/bin/true"); // Use /bin/true for testing
@@ -337,7 +344,10 @@ mod tests {
 
         // Start game should work with /bin/true
         let result = manager.start_game("test.iso").await;
-        assert!(result.is_ok(), "Game start should succeed with test executable");
+        assert!(
+            result.is_ok(),
+            "Game start should succeed with test executable"
+        );
 
         // Should be running
         assert!(manager.is_running().await, "Process should be running");

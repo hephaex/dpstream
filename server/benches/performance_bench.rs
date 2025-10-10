@@ -2,24 +2,28 @@
 //!
 //! Benchmarks key performance-critical operations
 
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId, black_box};
-use std::time::Duration;
-use std::sync::Arc;
+use cache_padded::CachePadded;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use dashmap::DashMap;
 use flume::{bounded, unbounded};
-use cache_padded::CachePadded;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
 fn bench_memory_allocation(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_allocation");
 
     for size in [1024, 4096, 16384, 65536].iter() {
-        group.bench_with_input(BenchmarkId::new("vec_allocation", size), size, |b, &size| {
-            b.iter(|| {
-                let vec: Vec<u8> = vec![0; size];
-                criterion::black_box(vec);
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("vec_allocation", size),
+            size,
+            |b, &size| {
+                b.iter(|| {
+                    let vec: Vec<u8> = vec![0; size];
+                    criterion::black_box(vec);
+                });
+            },
+        );
     }
 
     group.finish();
@@ -94,9 +98,7 @@ fn bench_async_operations(c: &mut Criterion) {
 
     group.bench_function("tokio_spawn", |b| {
         b.to_async(&rt).iter(|| async {
-            let handle = tokio::spawn(async {
-                42
-            });
+            let handle = tokio::spawn(async { 42 });
             let result = handle.await;
             criterion::black_box(result);
         });
@@ -132,7 +134,7 @@ fn bench_streaming_performance(c: &mut Criterion) {
             0x80, 0x60, 0x00, 0x01, // Version, PT, Sequence
             0x00, 0x00, 0x00, 0x10, // Timestamp
             0x12, 0x34, 0x56, 0x78, // SSRC
-            0x48, 0x65, 0x6c, 0x6c, 0x6f // Payload
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, // Payload
         ];
 
         b.iter(|| {

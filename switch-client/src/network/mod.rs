@@ -2,7 +2,7 @@
 //!
 //! Handles Tailscale connection and service discovery
 
-use crate::error::{Result, NetworkError};
+use crate::error::{NetworkError, Result};
 use alloc::string::String;
 use alloc::vec::Vec;
 

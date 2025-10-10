@@ -3,7 +3,7 @@
 //! Implements NVDEC hardware-accelerated video decoding on Tegra X1
 
 use crate::error::{Result, VideoError};
-use crate::sys::memory::{VideoBufferPool, MemoryPressure, check_memory_pressure};
+use crate::sys::memory::{check_memory_pressure, MemoryPressure, VideoBufferPool};
 use alloc::vec::Vec;
 use core::ptr::NonNull;
 use core::time::Duration;
@@ -94,13 +94,15 @@ impl VideoDecoder {
         if config.max_width == 0 || config.max_height == 0 {
             return Err(VideoError::InvalidConfiguration {
                 reason: "Width and height must be greater than 0".into(),
-            }.into());
+            }
+            .into());
         }
 
         if config.buffer_count < 2 {
             return Err(VideoError::InvalidConfiguration {
                 reason: "Buffer count must be at least 2".into(),
-            }.into());
+            }
+            .into());
         }
 
         Ok(Self {
@@ -136,14 +138,12 @@ impl VideoDecoder {
             return Err(VideoError::InsufficientMemory {
                 requested: total_memory_needed,
                 available: crate::sys::memory::get_memory_stats()?.free_heap,
-            }.into());
+            }
+            .into());
         }
 
         // Initialize video buffer pool
-        self.buffer_pool = Some(VideoBufferPool::new(
-            self.config.buffer_count,
-            buffer_size,
-        )?);
+        self.buffer_pool = Some(VideoBufferPool::new(self.config.buffer_count, buffer_size)?);
 
         // Initialize hardware decoder
         if self.config.enable_hardware_acceleration {
@@ -274,7 +274,8 @@ impl VideoDecoder {
 
     fn decode_packet_internal(&mut self, packet: &EncodedPacket) -> Result<Option<DecodedFrame>> {
         // Get a buffer from the pool
-        let buffer_ptr = self.buffer_pool
+        let buffer_ptr = self
+            .buffer_pool
             .as_mut()
             .ok_or(VideoError::DecoderNotInitialized)?
             .acquire()
@@ -287,7 +288,11 @@ impl VideoDecoder {
         }
     }
 
-    fn decode_with_hardware(&self, packet: &EncodedPacket, buffer: NonNull<u8>) -> Result<Option<DecodedFrame>> {
+    fn decode_with_hardware(
+        &self,
+        packet: &EncodedPacket,
+        buffer: NonNull<u8>,
+    ) -> Result<Option<DecodedFrame>> {
         // In a real implementation, this would:
         // 1. Set up NVDEC command buffer
         // 2. Configure decoding parameters
@@ -299,7 +304,11 @@ impl VideoDecoder {
         self.simulate_hardware_decode(packet, buffer)
     }
 
-    fn decode_with_software(&self, packet: &EncodedPacket, buffer: NonNull<u8>) -> Result<Option<DecodedFrame>> {
+    fn decode_with_software(
+        &self,
+        packet: &EncodedPacket,
+        buffer: NonNull<u8>,
+    ) -> Result<Option<DecodedFrame>> {
         // Software fallback (very limited on Switch)
         // In practice, this would use a minimal software decoder
         // or return an error if hardware is not available
@@ -307,7 +316,11 @@ impl VideoDecoder {
         self.simulate_software_decode(packet, buffer)
     }
 
-    fn simulate_hardware_decode(&self, packet: &EncodedPacket, buffer: NonNull<u8>) -> Result<Option<DecodedFrame>> {
+    fn simulate_hardware_decode(
+        &self,
+        packet: &EncodedPacket,
+        buffer: NonNull<u8>,
+    ) -> Result<Option<DecodedFrame>> {
         // Simulate NVDEC hardware decoding
         // In reality, this would involve:
         // - NVDEC command buffer setup
@@ -332,7 +345,11 @@ impl VideoDecoder {
         Ok(Some(decoded_frame))
     }
 
-    fn simulate_software_decode(&self, packet: &EncodedPacket, buffer: NonNull<u8>) -> Result<Option<DecodedFrame>> {
+    fn simulate_software_decode(
+        &self,
+        packet: &EncodedPacket,
+        buffer: NonNull<u8>,
+    ) -> Result<Option<DecodedFrame>> {
         // Simulate limited software decoding
         // On Switch, software decoding is very limited due to CPU constraints
 
@@ -340,7 +357,8 @@ impl VideoDecoder {
             // Too large for software decoding
             return Err(VideoError::SoftwareDecodingFailed {
                 reason: "Packet too large for software decoder".into(),
-            }.into());
+            }
+            .into());
         }
 
         // Simulate software decode (much slower)

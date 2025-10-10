@@ -1,9 +1,9 @@
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use anyhow::Result;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthStatus {
@@ -84,10 +84,7 @@ impl HealthMonitor {
                 .unwrap_or_default()
                 .as_secs(),
             version: self.version.clone(),
-            uptime_seconds: self.start_time
-                .elapsed()
-                .unwrap_or_default()
-                .as_secs(),
+            uptime_seconds: self.start_time.elapsed().unwrap_or_default().as_secs(),
             checks: checks.clone(),
         }
     }
@@ -222,17 +219,21 @@ pub async fn run_health_monitoring(monitor: Arc<HealthMonitor>) {
         interval.tick().await;
 
         // Update various health checks
-        monitor.update_check(
-            "system_resources",
-            ServiceStatus::Healthy,
-            "System resources within normal limits".to_string(),
-        ).await;
+        monitor
+            .update_check(
+                "system_resources",
+                ServiceStatus::Healthy,
+                "System resources within normal limits".to_string(),
+            )
+            .await;
 
-        monitor.update_check(
-            "active_sessions",
-            ServiceStatus::Healthy,
-            "Active sessions within capacity".to_string(),
-        ).await;
+        monitor
+            .update_check(
+                "active_sessions",
+                ServiceStatus::Healthy,
+                "Active sessions within capacity".to_string(),
+            )
+            .await;
 
         // Add more checks as needed
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -265,11 +266,13 @@ mod tests {
     async fn test_health_check_updates() {
         let monitor = HealthMonitor::new("1.0.0".to_string());
 
-        monitor.update_check(
-            "test_service",
-            ServiceStatus::Degraded,
-            "Test degraded state".to_string(),
-        ).await;
+        monitor
+            .update_check(
+                "test_service",
+                ServiceStatus::Degraded,
+                "Test degraded state".to_string(),
+            )
+            .await;
 
         let status = monitor.get_health_status().await;
         assert!(status.checks.contains_key("test_service"));

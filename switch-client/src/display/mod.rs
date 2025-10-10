@@ -2,7 +2,7 @@
 //!
 //! Handles framebuffer, rendering, and UI display
 
-use crate::error::{Result, DisplayError};
+use crate::error::{DisplayError, Result};
 use alloc::string::String;
 
 /// Main display manager
@@ -248,13 +248,48 @@ pub struct Color {
 }
 
 impl Color {
-    pub const BLACK: Color = Color { r: 0, g: 0, b: 0, a: 255 };
-    pub const WHITE: Color = Color { r: 255, g: 255, b: 255, a: 255 };
-    pub const RED: Color = Color { r: 255, g: 0, b: 0, a: 255 };
-    pub const GREEN: Color = Color { r: 0, g: 255, b: 0, a: 255 };
-    pub const BLUE: Color = Color { r: 0, g: 0, b: 255, a: 255 };
-    pub const YELLOW: Color = Color { r: 255, g: 255, b: 0, a: 255 };
-    pub const GRAY: Color = Color { r: 128, g: 128, b: 128, a: 255 };
+    pub const BLACK: Color = Color {
+        r: 0,
+        g: 0,
+        b: 0,
+        a: 255,
+    };
+    pub const WHITE: Color = Color {
+        r: 255,
+        g: 255,
+        b: 255,
+        a: 255,
+    };
+    pub const RED: Color = Color {
+        r: 255,
+        g: 0,
+        b: 0,
+        a: 255,
+    };
+    pub const GREEN: Color = Color {
+        r: 0,
+        g: 255,
+        b: 0,
+        a: 255,
+    };
+    pub const BLUE: Color = Color {
+        r: 0,
+        g: 0,
+        b: 255,
+        a: 255,
+    };
+    pub const YELLOW: Color = Color {
+        r: 255,
+        g: 255,
+        b: 0,
+        a: 255,
+    };
+    pub const GRAY: Color = Color {
+        r: 128,
+        g: 128,
+        b: 128,
+        a: 255,
+    };
 }
 
 /// Video frame data

@@ -5,7 +5,7 @@ use serde_json;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tracing::{info, error, debug};
+use tracing::{debug, error, info};
 
 pub struct HealthServer {
     health_monitor: Arc<HealthMonitor>,
@@ -29,9 +29,7 @@ impl HealthServer {
             async move {
                 Ok::<_, Infallible>(service_fn(move |req| {
                     let health_monitor = Arc::clone(&health_monitor);
-                    async move {
-                        handle_request(req, health_monitor).await
-                    }
+                    async move { handle_request(req, health_monitor).await }
                 }))
             }
         });
@@ -224,7 +222,10 @@ mod tests {
         let uri: Uri = "http://127.0.0.1:8081/ready".parse().unwrap();
         let response = client.get(uri).await.unwrap();
         // Readiness might be SERVICE_UNAVAILABLE depending on checks
-        assert!(response.status() == StatusCode::OK || response.status() == StatusCode::SERVICE_UNAVAILABLE);
+        assert!(
+            response.status() == StatusCode::OK
+                || response.status() == StatusCode::SERVICE_UNAVAILABLE
+        );
 
         // Test metrics endpoint
         let uri: Uri = "http://127.0.0.1:8081/metrics".parse().unwrap();

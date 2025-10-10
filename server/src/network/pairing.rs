@@ -43,7 +43,8 @@ impl PairingManager {
     pub fn complete_pairing(&mut self, pin: &str) -> Result<PairingResponse> {
         if let Some(request) = self.pending_pairs.remove(pin) {
             let session_token = self.generate_session_token();
-            self.paired_clients.insert(request.client_id.clone(), session_token.clone());
+            self.paired_clients
+                .insert(request.client_id.clone(), session_token.clone());
 
             tracing::info!("Pairing completed for client: {}", request.client_id);
 
@@ -64,20 +65,28 @@ impl PairingManager {
     }
 
     pub fn verify_client(&self, client_id: &str, token: &str) -> bool {
-        self.paired_clients.get(client_id).map_or(false, |stored_token| stored_token == token)
+        self.paired_clients
+            .get(client_id)
+            .map_or(false, |stored_token| stored_token == token)
     }
 
     fn generate_pin(&self) -> String {
         // Generate 4-digit PIN
         use std::time::{SystemTime, UNIX_EPOCH};
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         format!("{:04}", timestamp % 10000)
     }
 
     fn generate_session_token(&self) -> String {
         // Generate session token
         use std::time::{SystemTime, UNIX_EPOCH};
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         format!("session_{}", timestamp)
     }
 }

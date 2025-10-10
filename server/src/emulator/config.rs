@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DolphinConfig {
@@ -12,10 +12,10 @@ pub struct DolphinConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoConfig {
-    pub backend: String,           // "Vulkan", "OpenGL", "D3D11"
-    pub adapter: Option<String>,   // GPU adapter
-    pub resolution_scale: u32,     // 1x, 2x, 3x, etc.
-    pub anti_aliasing: String,     // "None", "FXAA", "MSAA"
+    pub backend: String,               // "Vulkan", "OpenGL", "D3D11"
+    pub adapter: Option<String>,       // GPU adapter
+    pub resolution_scale: u32,         // 1x, 2x, 3x, etc.
+    pub anti_aliasing: String,         // "None", "FXAA", "MSAA"
     pub anisotropic_filtering: String, // "1x", "2x", "4x", "8x", "16x"
     pub vsync: bool,
     pub fullscreen: bool,
@@ -23,23 +23,23 @@ pub struct VideoConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioConfig {
-    pub backend: String,           // "Pulse", "ALSA", "Cubeb"
-    pub volume: u8,               // 0-100
-    pub dsp_hle: bool,            // High-level DSP emulation
-    pub latency: u32,             // Audio latency in ms
+    pub backend: String, // "Pulse", "ALSA", "Cubeb"
+    pub volume: u8,      // 0-100
+    pub dsp_hle: bool,   // High-level DSP emulation
+    pub latency: u32,    // Audio latency in ms
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ControlsConfig {
     pub gamecube_adapter: bool,
-    pub wiimote_source: String,    // "None", "Emulated", "Real"
+    pub wiimote_source: String, // "None", "Emulated", "Real"
     pub players: HashMap<u8, PlayerConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerConfig {
-    pub device: String,           // "None", "Standard Controller", "GC Adapter"
-    pub profile: String,          // Controller profile name
+    pub device: String,  // "None", "Standard Controller", "GC Adapter"
+    pub profile: String, // Controller profile name
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,10 +54,13 @@ pub struct GeneralConfig {
 impl DolphinConfig {
     pub fn default_streaming() -> Self {
         let mut players = HashMap::new();
-        players.insert(1, PlayerConfig {
-            device: "Standard Controller".to_string(),
-            profile: "Remote Player".to_string(),
-        });
+        players.insert(
+            1,
+            PlayerConfig {
+                device: "Standard Controller".to_string(),
+                profile: "Remote Player".to_string(),
+            },
+        );
 
         Self {
             video: VideoConfig {

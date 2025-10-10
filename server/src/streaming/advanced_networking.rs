@@ -3,15 +3,15 @@
 //! Implements cutting-edge networking technologies for ultra-low latency
 //! and maximum throughput in dpstream remote gaming.
 
-use std::sync::Arc;
+use anyhow::{Context, Result};
+use parking_lot::{Mutex, RwLock};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
 use std::os::unix::io::RawFd;
-use parking_lot::{RwLock, Mutex};
+use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{info, debug, warn, error};
-use anyhow::{Result, Context};
-use serde::{Serialize, Deserialize};
+use tracing::{debug, error, info, warn};
 
 /// Advanced networking system with io_uring and RDMA support
 pub struct AdvancedNetworkingSystem {
@@ -294,8 +294,10 @@ impl AdvancedNetworkingSystem {
     /// Create advanced networking system with io_uring and RDMA support
     pub fn new(config: NetworkConfig) -> Result<Self> {
         info!("Initializing advanced networking system");
-        info!("io_uring enabled: {}, RDMA enabled: {}",
-              config.enable_io_uring, config.enable_rdma);
+        info!(
+            "io_uring enabled: {}, RDMA enabled: {}",
+            config.enable_io_uring, config.enable_rdma
+        );
 
         let packet_processor = Arc::new(PacketProcessor::new(config.batch_processing_size)?);
 
@@ -315,7 +317,10 @@ impl AdvancedNetworkingSystem {
             return Ok(());
         }
 
-        info!("Initializing io_uring with queue depth: {}", self.config.io_uring_queue_depth);
+        info!(
+            "Initializing io_uring with queue depth: {}",
+            self.config.io_uring_queue_depth
+        );
 
         // In a real implementation, this would initialize the actual io_uring
         // For demonstration, we simulate the initialization
@@ -358,7 +363,10 @@ impl AdvancedNetworkingSystem {
     pub async fn process_packets_zero_copy(&self, packets: Vec<NetworkMessage>) -> Result<()> {
         let start_time = std::time::Instant::now();
 
-        debug!("Processing {} packets with zero-copy optimization", packets.len());
+        debug!(
+            "Processing {} packets with zero-copy optimization",
+            packets.len()
+        );
 
         for packet in packets {
             // Route packet based on type and priority
@@ -379,7 +387,10 @@ impl AdvancedNetworkingSystem {
         }
 
         let processing_time = start_time.elapsed();
-        debug!("Zero-copy packet processing completed in {:?}", processing_time);
+        debug!(
+            "Zero-copy packet processing completed in {:?}",
+            processing_time
+        );
 
         // Update statistics
         let mut stats = self.stats.lock();
@@ -449,7 +460,11 @@ impl AdvancedNetworkingSystem {
 
     /// Standard fallback send method
     async fn send_standard(&self, _fd: RawFd, data: Vec<u8>, addr: SocketAddr) -> Result<()> {
-        debug!("Sending {} bytes using standard networking to {}", data.len(), addr);
+        debug!(
+            "Sending {} bytes using standard networking to {}",
+            data.len(),
+            addr
+        );
 
         // Simulate standard networking latency
         tokio::time::sleep(tokio::time::Duration::from_micros(10)).await;
@@ -459,7 +474,10 @@ impl AdvancedNetworkingSystem {
 
     /// Process video packets with zero-copy optimization
     async fn process_video_packet_zero_copy(&self, packet: NetworkMessage) -> Result<()> {
-        debug!("Processing video packet with zero-copy (size: {})", packet.data.len());
+        debug!(
+            "Processing video packet with zero-copy (size: {})",
+            packet.data.len()
+        );
 
         // In a real implementation:
         // 1. Use packet buffer pools to avoid allocations
@@ -474,7 +492,10 @@ impl AdvancedNetworkingSystem {
 
     /// Process audio packets with low-latency optimization
     async fn process_audio_packet_zero_copy(&self, packet: NetworkMessage) -> Result<()> {
-        debug!("Processing audio packet with zero-copy (size: {})", packet.data.len());
+        debug!(
+            "Processing audio packet with zero-copy (size: {})",
+            packet.data.len()
+        );
 
         // Simulate optimized audio processing
         tokio::time::sleep(tokio::time::Duration::from_nanos(50)).await;
@@ -518,7 +539,9 @@ impl AdvancedNetworkingSystem {
         result.active_connections = self.connections.read().len() as u64;
 
         // Calculate total throughput across all connections
-        let total_bytes: u64 = self.connections.read()
+        let total_bytes: u64 = self
+            .connections
+            .read()
             .values()
             .map(|conn| conn.stats.bytes_sent + conn.stats.bytes_received)
             .sum();
@@ -535,7 +558,8 @@ impl AdvancedNetworkingSystem {
         let stats = self.get_network_stats();
 
         // Dynamic optimization based on performance metrics
-        if stats.average_latency_ns > 1_000_000 { // > 1ms
+        if stats.average_latency_ns > 1_000_000 {
+            // > 1ms
             warn!("High latency detected, enabling aggressive optimizations");
 
             // Enable more aggressive optimizations
@@ -548,11 +572,15 @@ impl AdvancedNetworkingSystem {
             // Increase batch processing size for throughput
             if self.config.batch_processing_size < 64 {
                 self.config.batch_processing_size = 64;
-                info!("Increased batch processing size to {}", self.config.batch_processing_size);
+                info!(
+                    "Increased batch processing size to {}",
+                    self.config.batch_processing_size
+                );
             }
         }
 
-        if stats.packet_loss_rate > 0.01 { // > 1%
+        if stats.packet_loss_rate > 0.01 {
+            // > 1%
             warn!("High packet loss detected, adjusting configuration");
 
             // Enable RDMA for critical connections if available
@@ -571,14 +599,17 @@ impl AdvancedNetworkingSystem {
 impl PacketProcessor {
     /// Create a new packet processor with zero-copy capabilities
     pub fn new(batch_size: usize) -> Result<Self> {
-        info!("Initializing packet processor with batch size: {}", batch_size);
+        info!(
+            "Initializing packet processor with batch size: {}",
+            batch_size
+        );
 
         // Create packet pools for different sizes
         let packet_pools = vec![
-            PacketPool::new(0, 64, 1000)?,    // Small packets (control)
-            PacketPool::new(1, 1500, 500)?,  // MTU-sized packets (standard)
-            PacketPool::new(2, 9000, 100)?,  // Jumbo packets (video)
-            PacketPool::new(3, 65536, 50)?,  // Large packets (bulk data)
+            PacketPool::new(0, 64, 1000)?,  // Small packets (control)
+            PacketPool::new(1, 1500, 500)?, // MTU-sized packets (standard)
+            PacketPool::new(2, 9000, 100)?, // Jumbo packets (video)
+            PacketPool::new(3, 65536, 50)?, // Large packets (bulk data)
         ];
 
         Ok(Self {
@@ -664,14 +695,12 @@ mod tests {
 
         let system = AdvancedNetworkingSystem::new(config).unwrap();
 
-        let packets = vec![
-            NetworkMessage {
-                data: vec![0u8; 1024],
-                msg_type: MessageType::VideoFrame,
-                priority: MessagePriority::High,
-                timestamp: std::time::Instant::now(),
-            }
-        ];
+        let packets = vec![NetworkMessage {
+            data: vec![0u8; 1024],
+            msg_type: MessageType::VideoFrame,
+            priority: MessagePriority::High,
+            timestamp: std::time::Instant::now(),
+        }];
 
         let result = system.process_packets_zero_copy(packets).await;
         assert!(result.is_ok());

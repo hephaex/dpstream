@@ -2,9 +2,9 @@
 //!
 //! Provides optimized memory allocation and management for limited resources
 
-use crate::error::{Result, MemoryError};
+use crate::error::{MemoryError, Result};
 use alloc::vec::Vec;
-use core::mem::{size_of, align_of};
+use core::mem::{align_of, size_of};
 use core::ptr::NonNull;
 
 /// Memory allocator statistics with performance metrics
@@ -34,7 +34,8 @@ impl VideoBufferPool {
             return Err(MemoryError::InsufficientMemory {
                 requested: buffer_count * buffer_size,
                 available: get_memory_stats()?.free_heap,
-            }.into());
+            }
+            .into());
         }
 
         let mut buffers = Vec::with_capacity(buffer_count);
@@ -82,11 +83,17 @@ impl VideoBufferPool {
     /// Return a buffer to the pool
     pub fn release(&mut self, ptr: NonNull<u8>) -> Result<()> {
         // Find the buffer index
-        let index = self.buffers.iter().position(|&buf_ptr| buf_ptr == ptr)
+        let index = self
+            .buffers
+            .iter()
+            .position(|&buf_ptr| buf_ptr == ptr)
             .ok_or(MemoryError::InvalidPointer)?;
 
         // Move from in_use to available
-        let in_use_pos = self.in_use.iter().position(|&i| i == index)
+        let in_use_pos = self
+            .in_use
+            .iter()
+            .position(|&i| i == index)
             .ok_or(MemoryError::DoubleRelease)?;
 
         self.in_use.swap_remove(in_use_pos);
@@ -136,7 +143,7 @@ pub fn get_memory_stats() -> Result<MemoryStats> {
         // In real implementation: query libnx heap functions
         // For now, simulate reasonable values for Switch
         MEMORY_STATS.total_heap = 64 * 1024 * 1024; // 64MB available to homebrew
-        MEMORY_STATS.used_heap = 8 * 1024 * 1024;   // Current usage
+        MEMORY_STATS.used_heap = 8 * 1024 * 1024; // Current usage
         MEMORY_STATS.free_heap = MEMORY_STATS.total_heap - MEMORY_STATS.used_heap;
         MEMORY_STATS.largest_free_block = MEMORY_STATS.free_heap * 3 / 4; // Account for fragmentation
         MEMORY_STATS.fragmentation_ratio =

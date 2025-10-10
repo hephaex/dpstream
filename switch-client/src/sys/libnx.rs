@@ -21,9 +21,7 @@ impl LibnxSystem {
         // - gfxInitResolution(GfxMode_Handheld, 720, 1280)
 
         // Mock implementation for now
-        Ok(Self {
-            initialized: true,
-        })
+        Ok(Self { initialized: true })
     }
 
     /// Check if services are properly initialized

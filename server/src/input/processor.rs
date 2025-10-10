@@ -2,9 +2,9 @@
 //!
 //! Converts Moonlight input packets to Dolphin-compatible commands
 
-use crate::error::{Result, InputError};
-use crate::input::{MoonlightInputPacket, TouchPoint};
+use crate::error::{InputError, Result};
 use crate::input::mapping::ControllerMapping;
+use crate::input::{MoonlightInputPacket, TouchPoint};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 use tracing::{debug, warn};
@@ -88,7 +88,10 @@ impl InputProcessor {
     }
 
     /// Get buffered commands with batch size limit for performance control
-    pub async fn get_dolphin_commands_batched(&mut self, batch_size: usize) -> Result<Option<Vec<DolphinCommand>>> {
+    pub async fn get_dolphin_commands_batched(
+        &mut self,
+        batch_size: usize,
+    ) -> Result<Option<Vec<DolphinCommand>>> {
         if self.command_buffer.is_empty() {
             return Ok(None);
         }
@@ -158,14 +161,14 @@ impl InputProcessor {
 
         // Moonlight button flags to GameCube buttons mapping
         let button_mappings = [
-            (0x1000, &mapping.a_button),      // A
-            (0x2000, &mapping.b_button),      // B
-            (0x4000, &mapping.x_button),      // X
-            (0x8000, &mapping.y_button),      // Y
-            (0x0100, &mapping.l_button),      // L shoulder
-            (0x0200, &mapping.r_button),      // R shoulder
-            (0x0020, &mapping.z_button),      // Back (mapped to Z)
-            (0x0010, &mapping.start_button),  // Start
+            (0x1000, &mapping.a_button),     // A
+            (0x2000, &mapping.b_button),     // B
+            (0x4000, &mapping.x_button),     // X
+            (0x8000, &mapping.y_button),     // Y
+            (0x0100, &mapping.l_button),     // L shoulder
+            (0x0200, &mapping.r_button),     // R shoulder
+            (0x0020, &mapping.z_button),     // Back (mapped to Z)
+            (0x0010, &mapping.start_button), // Start
         ];
 
         for (flag, dolphin_button) in button_mappings {

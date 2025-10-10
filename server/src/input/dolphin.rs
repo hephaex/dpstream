@@ -2,14 +2,14 @@
 //!
 //! Handles communication with Dolphin emulator for input injection
 
-use crate::error::{Result, InputError, EmulatorError};
-use crate::input::processor::{DolphinCommand, DolphinButton, AnalogStick};
-use std::collections::HashMap;
-use std::process::{Command, Stdio};
-use std::io::Write;
-use tokio::sync::mpsc;
-use tracing::{info, debug, warn, error};
+use crate::error::{EmulatorError, InputError, Result};
+use crate::input::processor::{AnalogStick, DolphinButton, DolphinCommand};
 use serde_json;
+use std::collections::HashMap;
+use std::io::Write;
+use std::process::{Command, Stdio};
+use tokio::sync::mpsc;
+use tracing::{debug, error, info, warn};
 
 /// Adapter for sending input commands to Dolphin emulator
 pub struct DolphinInputAdapter {
@@ -63,16 +63,18 @@ impl DolphinInputAdapter {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| EmulatorError::StartupFailed {
-                reason: format!("Failed to start Dolphin with pipe input: {}", e)
+                reason: format!("Failed to start Dolphin with pipe input: {}", e),
             })?;
 
         // Set up command channel
         let (sender, mut receiver) = mpsc::unbounded_channel::<String>();
 
         // Get stdin handle for sending commands
-        let mut stdin = dolphin.stdin.take()
+        let mut stdin = dolphin
+            .stdin
+            .take()
             .ok_or_else(|| EmulatorError::StartupFailed {
-                reason: "Failed to get Dolphin stdin".to_string()
+                reason: "Failed to get Dolphin stdin".to_string(),
             })?;
 
         // Spawn task to handle command sending
@@ -104,7 +106,10 @@ impl DolphinInputAdapter {
     /// Connect a controller to a specific player slot
     pub fn connect_controller(&mut self, player_slot: u8) -> Result<()> {
         if player_slot == 0 || player_slot > 4 {
-            return Err(InputError::InvalidPlayer { player: player_slot }.into());
+            return Err(InputError::InvalidPlayer {
+                player: player_slot,
+            }
+            .into());
         }
 
         let connection = ControllerConnection {
@@ -149,21 +154,34 @@ impl DolphinInputAdapter {
     /// Send a single command to Dolphin
     async fn send_dolphin_command(&mut self, command: DolphinCommand) -> Result<()> {
         let dolphin_cmd = match command {
-            DolphinCommand::ButtonPress { player, button, pressed } => {
+            DolphinCommand::ButtonPress {
+                player,
+                button,
+                pressed,
+            } => {
                 if !self.connected_controllers.contains_key(&player) {
                     self.connect_controller(player)?;
                 }
                 self.format_button_command(player, button, pressed)
             }
-            DolphinCommand::AnalogInput { player, stick, x, y } => {
-                self.format_analog_command(player, stick, x, y)
-            }
-            DolphinCommand::TriggerInput { player, left_trigger, right_trigger } => {
-                self.format_trigger_command(player, left_trigger, right_trigger)
-            }
-            DolphinCommand::DPadInput { player, up, down, left, right } => {
-                self.format_dpad_command(player, up, down, left, right)
-            }
+            DolphinCommand::AnalogInput {
+                player,
+                stick,
+                x,
+                y,
+            } => self.format_analog_command(player, stick, x, y),
+            DolphinCommand::TriggerInput {
+                player,
+                left_trigger,
+                right_trigger,
+            } => self.format_trigger_command(player, left_trigger, right_trigger),
+            DolphinCommand::DPadInput {
+                player,
+                up,
+                down,
+                left,
+                right,
+            } => self.format_dpad_command(player, up, down, left, right),
             DolphinCommand::WiiPointerInput { player, x, y, z } => {
                 self.format_pointer_command(player, x, y, z)
             }
@@ -214,12 +232,27 @@ impl DolphinInputAdapter {
         format!("TRIGGER {} {} {}", player, left_val, right_val)
     }
 
-    fn format_dpad_command(&self, player: u8, up: bool, down: bool, left: bool, right: bool) -> String {
+    fn format_dpad_command(
+        &self,
+        player: u8,
+        up: bool,
+        down: bool,
+        left: bool,
+        right: bool,
+    ) -> String {
         let mut dpad_val = 0u8;
-        if up { dpad_val |= 1; }
-        if down { dpad_val |= 2; }
-        if left { dpad_val |= 4; }
-        if right { dpad_val |= 8; }
+        if up {
+            dpad_val |= 1;
+        }
+        if down {
+            dpad_val |= 2;
+        }
+        if left {
+            dpad_val |= 4;
+        }
+        if right {
+            dpad_val |= 8;
+        }
 
         format!("DPAD {} {}", player, dpad_val)
     }
@@ -229,7 +262,13 @@ impl DolphinInputAdapter {
         let screen_x = ((x + 1.0) * 512.0) as u16; // Assuming 1024x768 screen
         let screen_y = ((y + 1.0) * 384.0) as u16;
 
-        format!("POINTER {} {} {} {}", player, screen_x, screen_y, (z * 100.0) as u8)
+        format!(
+            "POINTER {} {} {} {}",
+            player,
+            screen_x,
+            screen_y,
+            (z * 100.0) as u8
+        )
     }
 
     fn send_command(&mut self, command: String) -> Result<()> {
@@ -252,8 +291,9 @@ impl DolphinInputAdapter {
                     self.connection_health.is_healthy = false;
 
                     return Err(InputError::CommandSendFailed {
-                        reason: e.to_string()
-                    }.into());
+                        reason: e.to_string(),
+                    }
+                    .into());
                 }
             }
         } else {
@@ -326,11 +366,11 @@ struct ControllerConnection {
 #[derive(Debug, Clone, Copy)]
 enum DolphinControllerType {
     None,
-    Standard,        // Standard GameCube controller
-    WaveBird,        // Wireless GameCube controller
-    DKBongos,        // DK Bongos
-    WiiRemote,       // Wii Remote
-    WiiRemoteNunchuk, // Wii Remote + Nunchuk
+    Standard,          // Standard GameCube controller
+    WaveBird,          // Wireless GameCube controller
+    DKBongos,          // DK Bongos
+    WiiRemote,         // Wii Remote
+    WiiRemoteNunchuk,  // Wii Remote + Nunchuk
     ClassicController, // Wii Classic Controller
 }
 
