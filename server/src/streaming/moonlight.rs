@@ -82,8 +82,8 @@ pub struct AudioConfig {
 #[derive(Debug, Clone, Copy)]
 pub enum AudioCodec {
     Opus,
-    AAC,
-    PCM,
+    Aac,
+    Pcm,
 }
 
 /// Stream configuration
@@ -588,25 +588,20 @@ impl MoonlightServer {
         // NOTE: This is a stub implementation for minimal build
         // In a full implementation, this would handle streaming and control messages
         let mut buffer = vec![0u8; 1024];
-        loop {
-            match stream.readable().await {
-                Ok(_) => {
-                    match stream.try_read(&mut buffer) {
-                        Ok(0) => break, // Connection closed
-                        Ok(_n) => {
-                            // Parse control messages would go here
-                        }
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-                            continue;
-                        }
-                        Err(e) => {
-                            error!("Read error: {}", e);
-                            break;
-                        }
-                    }
+        while let Ok(_) = stream.readable().await {
+            match stream.try_read(&mut buffer) {
+                Ok(0) => break, // Connection closed
+                Ok(_n) => {
+                    // Parse control messages would go here
                 }
-                Err(_) => break,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                    continue;
+                }
+                Err(e) => {
+                    error!("Read error: {}", e);
+                    break;
+                }
             }
         }
 

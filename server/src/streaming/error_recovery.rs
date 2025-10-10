@@ -663,7 +663,7 @@ impl ErrorRecoverySystem {
             .collect();
 
         // Sort by priority (highest first)
-        applicable.sort_by(|a, b| b.priority().cmp(&a.priority()));
+        applicable.sort_by_key(|b| std::cmp::Reverse(b.priority()));
 
         applicable
     }
