@@ -6,7 +6,7 @@ pub mod dolphin;
 pub mod mapping;
 pub mod processor;
 
-use crate::error::{InputError, Result};
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;

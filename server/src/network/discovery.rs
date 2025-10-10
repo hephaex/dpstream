@@ -1,8 +1,8 @@
 // mDNS/UPnP service discovery using modern service discovery protocols
-use crate::error::{NetworkError, Result};
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerInfo {

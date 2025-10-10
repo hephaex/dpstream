@@ -164,7 +164,7 @@ impl Default for PoolConfig {
 }
 
 #[derive(Debug, Default)]
-struct PoolStatistics {
+pub struct PoolStatistics {
     total_allocations: AtomicUsize,
     pool_hits: AtomicUsize,
     pool_misses: AtomicUsize,

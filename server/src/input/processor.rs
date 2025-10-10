@@ -2,7 +2,7 @@
 //!
 //! Converts Moonlight input packets to Dolphin-compatible commands
 
-use crate::error::{InputError, Result};
+use crate::error::Result;
 use crate::input::mapping::ControllerMapping;
 use crate::input::{MoonlightInputPacket, TouchPoint};
 use std::collections::VecDeque;
@@ -233,7 +233,7 @@ impl InputProcessor {
     fn convert_triggers(
         &self,
         player_slot: u8,
-        _mapping: &ControllerMapping,
+        mapping: &ControllerMapping,
         input: &MoonlightInputPacket,
     ) -> Result<Vec<DolphinCommand>> {
         let mut commands = Vec::new();

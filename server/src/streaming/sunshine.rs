@@ -2,9 +2,8 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::process::{Child, Command, Stdio};
-use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use std::process::Child;
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamConfig {

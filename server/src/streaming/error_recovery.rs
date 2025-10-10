@@ -3,7 +3,6 @@
 //! Implements comprehensive error handling with correlation tracking, circuit breakers,
 //! automatic recovery, and distributed tracing for enterprise-grade reliability.
 
-use arrayvec::ArrayVec;
 use crossbeam_utils::CachePadded;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
@@ -11,11 +10,11 @@ use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use smallvec::{smallvec, SmallVec};
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio::time::{sleep, timeout};
+use tokio::sync::broadcast;
+use tokio::time::timeout;
 use tracing::{debug, error, info, span, warn, Instrument, Level};
 use uuid::Uuid;
 
@@ -558,7 +557,7 @@ impl ErrorRecoverySystem {
             let strategies = self.get_applicable_strategies(&error.error_type);
 
             for strategy in strategies {
-                let attempt = RecoveryAttempt {
+                let _attempt = RecoveryAttempt {
                     attempt_id: Uuid::new_v4(),
                     strategy_name: strategy.name().to_string(),
                     started_at: SystemTime::now(),

@@ -1,7 +1,7 @@
 use crate::error::{EmulatorError, Result};
 use std::env;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::process::{Child, Command};
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
@@ -105,14 +105,10 @@ impl DolphinManager {
             tokio::time::sleep(Duration::from_secs(3)).await;
 
             // Find the Dolphin window
-            if let Err(e) = self.find_dolphin_window().await {
-                return Err(e);
-            }
+            self.find_dolphin_window().await?;
 
             // Start process monitoring
-            if let Err(e) = self.start_process_monitor().await {
-                return Err(e);
-            }
+            self.start_process_monitor().await?;
 
             Ok::<(), crate::error::DpstreamError>(())
         })
@@ -126,7 +122,7 @@ impl DolphinManager {
             Ok(Err(e)) => {
                 error!("Dolphin startup failed: {}", e);
                 self.stop_game().await?;
-                Err(e.into())
+                Err(e)
             }
             Err(_) => {
                 error!("Dolphin startup timed out after {:?}", self.startup_timeout);
@@ -212,7 +208,7 @@ impl DolphinManager {
 
             if attempt >= 3 {
                 // Simulate finding window after a few attempts
-                let window_id = 0x12345678 + (attempt as u64);
+                let window_id = 0x12345678 + attempt;
                 self.window_id = Some(window_id);
                 info!("Found Dolphin window with ID: 0x{:x}", window_id);
                 return Ok(());
@@ -302,7 +298,6 @@ impl Drop for DolphinManager {
 mod tests {
     use super::*;
     use std::env;
-    use tokio_test;
 
     fn setup_test_env() {
         env::set_var("DOLPHIN_PATH", "/usr/bin/true"); // Use /bin/true for testing
@@ -312,23 +307,37 @@ mod tests {
         env::set_var("DOLPHIN_STARTUP_TIMEOUT", "5");
     }
 
+    fn create_test_config() -> DolphinConfig {
+        DolphinConfig {
+            executable_path: "/usr/bin/true".to_string(),
+            rom_directory: "/tmp/test-roms".to_string(),
+            save_directory: "/tmp/test-saves".to_string(),
+            window_title: "Dolphin Test".to_string(),
+            enable_graphics_mods: false,
+            enable_netplay: false,
+            audio_backend: "nullsink".to_string(),
+            video_backend: "Null".to_string(),
+        }
+    }
+
     #[tokio::test]
     async fn test_dolphin_manager_creation() {
         setup_test_env();
 
-        let result = DolphinManager::new("100.64.0.1".to_string());
+        let config = create_test_config();
+        let result = DolphinManager::new(config);
         assert!(result.is_ok(), "DolphinManager creation should succeed");
 
-        let manager = result.unwrap();
-        assert_eq!(manager.tailscale_ip, "100.64.0.1");
+        let mut manager = result.unwrap();
         assert!(!manager.is_running().await);
     }
 
     #[tokio::test]
     async fn test_invalid_executable_path() {
-        env::set_var("DOLPHIN_PATH", "/nonexistent/path");
+        let mut config = create_test_config();
+        config.executable_path = "/nonexistent/path".to_string();
 
-        let result = DolphinManager::new("100.64.0.1".to_string());
+        let result = DolphinManager::new(config);
         assert!(result.is_err(), "Should fail with invalid executable path");
     }
 
@@ -336,7 +345,8 @@ mod tests {
     async fn test_process_lifecycle() {
         setup_test_env();
 
-        let mut manager = DolphinManager::new("100.64.0.1".to_string()).unwrap();
+        let config = create_test_config();
+        let mut manager = DolphinManager::new(config).unwrap();
 
         // Create a dummy ROM file for testing
         std::fs::create_dir_all("/tmp/test-roms").ok();
@@ -364,7 +374,8 @@ mod tests {
     async fn test_nonexistent_rom() {
         setup_test_env();
 
-        let mut manager = DolphinManager::new("100.64.0.1".to_string()).unwrap();
+        let config = create_test_config();
+        let mut manager = DolphinManager::new(config).unwrap();
 
         let result = manager.start_game("nonexistent.iso").await;
         assert!(result.is_err(), "Should fail with nonexistent ROM");
@@ -374,7 +385,8 @@ mod tests {
     async fn test_multiple_stop_calls() {
         setup_test_env();
 
-        let mut manager = DolphinManager::new("100.64.0.1".to_string()).unwrap();
+        let config = create_test_config();
+        let mut manager = DolphinManager::new(config).unwrap();
 
         // Multiple stop calls should not fail
         let result1 = manager.stop_game().await;

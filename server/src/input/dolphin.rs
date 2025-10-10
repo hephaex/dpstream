@@ -129,7 +129,7 @@ impl DolphinInputAdapter {
 
     /// Disconnect controller from player slot
     pub fn disconnect_controller(&mut self, player_slot: u8) -> Result<()> {
-        if let Some(_) = self.connected_controllers.remove(&player_slot) {
+        if self.connected_controllers.remove(&player_slot).is_some() {
             let command = format!("SET CONTROLLER {} NONE", player_slot);
             self.send_command(command)?;
             info!("Disconnected controller for player {}", player_slot);
@@ -308,7 +308,7 @@ impl DolphinInputAdapter {
         // Check if too much time has passed since last command
         if now.duration_since(self.last_command_time).as_secs() > 5 {
             // Send a heartbeat command to verify connection
-            if let Err(_) = self.send_command("HEARTBEAT".to_string()) {
+            if self.send_command("HEARTBEAT".to_string()).is_err() {
                 warn!("Dolphin connection health check failed");
                 self.connection_health.is_healthy = false;
             }

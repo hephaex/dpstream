@@ -268,8 +268,8 @@ impl MoonlightServer {
         let sessions = Arc::clone(&self.sessions);
         let is_running = Arc::clone(&self.is_running);
         let config = self.config.clone();
-        let video_broadcast = self.video_broadcast.clone();
-        let audio_broadcast = self.audio_broadcast.clone();
+        let _video_broadcast = self.video_broadcast.clone();
+        let _audio_broadcast = self.audio_broadcast.clone();
 
         tokio::spawn(async move {
             Self::handle_control_connections(
@@ -277,8 +277,8 @@ impl MoonlightServer {
                 sessions,
                 is_running,
                 config,
-                video_broadcast,
-                audio_broadcast,
+                _video_broadcast,
+                _audio_broadcast,
             )
             .await;
         });
@@ -377,7 +377,7 @@ impl MoonlightServer {
     /// Convert ControllerInput to MoonlightInputPacket
     fn convert_controller_input_to_moonlight(
         &self,
-        controller_id: u8,
+        _controller_id: u8,
         input: ControllerInput,
     ) -> MoonlightInputPacket {
         MoonlightInputPacket {
@@ -443,8 +443,8 @@ impl MoonlightServer {
         sessions: Arc<DashMap<Uuid, StreamingSession>>,
         is_running: Arc<ParkingMutex<bool>>,
         config: ServerConfig,
-        video_broadcast: Sender<VideoFrame>,
-        audio_broadcast: Sender<AudioFrame>,
+        _video_broadcast: Sender<VideoFrame>,
+        _audio_broadcast: Sender<AudioFrame>,
     ) {
         while *is_running.lock() {
             match listener.accept().await {
@@ -476,8 +476,8 @@ impl MoonlightServer {
 
                     // Handle client session
                     let sessions_clone = Arc::clone(&sessions);
-                    let video_broadcast_clone = video_broadcast.clone();
-                    let audio_broadcast_clone = audio_broadcast.clone();
+                    let _video_broadcast_clone = _video_broadcast.clone();
+                    let _audio_broadcast_clone = _audio_broadcast.clone();
                     let config_clone = config.clone();
 
                     tokio::spawn(async move {
@@ -486,8 +486,8 @@ impl MoonlightServer {
                             session_id,
                             sessions_clone,
                             config_clone,
-                            video_broadcast_clone,
-                            audio_broadcast_clone,
+                            _video_broadcast_clone,
+                            _audio_broadcast_clone,
                         )
                         .await
                         {
@@ -508,8 +508,8 @@ impl MoonlightServer {
         session_id: Uuid,
         sessions: Arc<DashMap<Uuid, StreamingSession>>,
         config: ServerConfig,
-        video_broadcast: Sender<VideoFrame>,
-        audio_broadcast: Sender<AudioFrame>,
+        _video_broadcast: Sender<VideoFrame>,
+        _audio_broadcast: Sender<AudioFrame>,
     ) -> Result<()> {
         info!("Handling client session: {}", session_id);
 
@@ -554,8 +554,8 @@ impl MoonlightServer {
         info!("Moonlight handshake completed for session {}", session_id);
 
         // Set up video and audio streams with flume channels
-        let (video_tx, video_rx) = unbounded();
-        let (audio_tx, audio_rx) = unbounded();
+        let (video_tx, _video_rx) = unbounded();
+        let (audio_tx, _audio_rx) = unbounded();
 
         // Note: flume doesn't have broadcast semantics like tokio::sync::broadcast
         // In a real implementation, we'd need to use a proper broadcast mechanism
@@ -634,7 +634,7 @@ impl MoonlightServer {
     }
 
     /// Perform RTSP handshake for session negotiation
-    async fn perform_rtsp_handshake(stream: &mut TcpStream, config: &ServerConfig) -> Result<()> {
+    async fn perform_rtsp_handshake(_stream: &mut TcpStream, _config: &ServerConfig) -> Result<()> {
         // Simplified RTSP handshake implementation
         debug!("Performing RTSP handshake");
 
@@ -647,8 +647,8 @@ impl MoonlightServer {
 
     /// Exchange capabilities with the client
     async fn exchange_capabilities(
-        stream: &mut TcpStream,
-        config: &ServerConfig,
+        _stream: &mut TcpStream,
+        _config: &ServerConfig,
     ) -> Result<ClientCapabilities> {
         debug!("Exchanging capabilities");
 
@@ -664,7 +664,7 @@ impl MoonlightServer {
     }
 
     /// Exchange encryption keys if encryption is enabled
-    async fn exchange_encryption_keys(stream: &mut TcpStream) -> Result<()> {
+    async fn exchange_encryption_keys(_stream: &mut TcpStream) -> Result<()> {
         debug!("Exchanging encryption keys");
 
         // In a real implementation, this would perform key exchange using AES or similar
@@ -676,8 +676,8 @@ impl MoonlightServer {
 
     /// Negotiate stream configuration with client
     async fn negotiate_stream_config(
-        stream: &mut TcpStream,
-        capabilities: ClientCapabilities,
+        _stream: &mut TcpStream,
+        _capabilities: ClientCapabilities,
     ) -> Result<NegotiatedStreamConfig> {
         debug!("Negotiating stream configuration");
 
@@ -780,7 +780,7 @@ impl MoonlightServer {
             };
 
             // Convert to MoonlightInputPacket
-            let input_packet = self.convert_controller_input_to_moonlight(0, controller_input);
+            let _input_packet = self.convert_controller_input_to_moonlight(0, controller_input);
 
             // Send to input manager if available - parking_lot RwLock needs write()
             if let Some(input_manager) = self.input_manager.write().as_mut() {
