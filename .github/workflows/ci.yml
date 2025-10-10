@@ -186,15 +186,48 @@ jobs:
   security:
     name: Security Analysis
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Run security analysis
-      uses: securecodewarrior/github-action-add-sarif@v1
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
       with:
-        sarif-file: 'security-analysis.sarif'
+        languages: 'cpp'  # Rust is analyzed as C++
+        queries: security-and-quality
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+
+    - name: Build for CodeQL analysis
+      run: |
+        cd server
+        cargo build --release
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:cpp"
+
+    - name: Run cargo-deny
+      uses: EmbarkStudios/cargo-deny-action@v1
+      with:
+        log-level: warn
+        command: check
+        arguments: --all-features
 
   release:
     name: Create Release
