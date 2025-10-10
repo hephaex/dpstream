@@ -7,20 +7,15 @@ use crate::health::HealthMonitor;
 use crate::input::{MoonlightInputPacket, ServerInputManager};
 // Capture module is disabled for minimal build
 // use crate::streaming::capture::{VideoCapture, VideoCaptureConfig, VideoFrame};
-use ahash::AHashMap;
-use bumpalo::Bump;
-use cache_padded::CachePadded;
+use crossbeam_utils::CachePadded;
 use dashmap::DashMap;
-use flume::{bounded, unbounded, Receiver, Sender};
-use once_cell::sync::Lazy;
+use flume::{bounded, unbounded, Sender};
 use parking_lot::{Mutex as ParkingMutex, RwLock};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
-use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 

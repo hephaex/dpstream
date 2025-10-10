@@ -4,7 +4,7 @@
 //! to eliminate allocation overhead in the critical video processing path.
 
 use bumpalo::Bump;
-use cache_padded::CachePadded;
+use crossbeam_utils::CachePadded;
 use parking_lot::{Mutex, RwLock};
 use smallvec::{smallvec, SmallVec};
 use std::sync::atomic::{AtomicUsize, Ordering};

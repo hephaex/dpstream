@@ -4,10 +4,8 @@
 
 use crate::error::{EmulatorError, InputError, Result};
 use crate::input::processor::{AnalogStick, DolphinButton, DolphinCommand};
-use serde_json;
 use std::collections::HashMap;
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};

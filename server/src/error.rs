@@ -1,5 +1,4 @@
 // Centralized error handling for dpstream server
-use std::fmt;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -518,10 +517,10 @@ impl DpstreamError {
 #[macro_export]
 macro_rules! dpstream_error {
     ($err:expr) => {
-        crate::error::DpstreamError::Internal($err.to_string())
+        $crate::error::DpstreamError::Internal($err.to_string())
     };
     ($err:expr, $context:expr) => {
-        crate::error::DpstreamError::Internal(format!("{}: {}", $context, $err))
+        $crate::error::DpstreamError::Internal(format!("{}: {}", $context, $err))
     };
 }
 
@@ -529,9 +528,9 @@ macro_rules! dpstream_error {
 #[macro_export]
 macro_rules! error_report {
     ($err:expr) => {
-        crate::error::ErrorReport::new($err)
+        $crate::error::ErrorReport::new($err)
     };
     ($err:expr, $context:expr) => {
-        crate::error::ErrorReport::new($err).with_context($context.to_string())
+        $crate::error::ErrorReport::new($err).with_context($context.to_string())
     };
 }

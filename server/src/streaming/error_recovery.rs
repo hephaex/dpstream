@@ -4,7 +4,7 @@
 //! automatic recovery, and distributed tracing for enterprise-grade reliability.
 
 use arrayvec::ArrayVec;
-use cache_padded::CachePadded;
+use crossbeam_utils::CachePadded;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use parking_lot::{Mutex, RwLock};
