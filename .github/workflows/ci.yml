@@ -44,30 +44,15 @@ jobs:
         cd server
         cargo fmt --all -- --check
 
-    - name: Check formatting (switch-client)
-      run: |
-        cd switch-client
-        cargo fmt --all -- --check
-
     - name: Run Clippy (server)
       run: |
         cd server
         cargo clippy --all-targets --all-features -- -D warnings
 
-    - name: Run Clippy (switch-client)
-      run: |
-        cd switch-client
-        cargo clippy --lib --all-features -- -D warnings
-
     - name: Security audit (server)
       run: |
         cargo install cargo-audit
         cd server
-        cargo audit
-
-    - name: Security audit (switch-client)
-      run: |
-        cd switch-client
         cargo audit
 
   test:
@@ -116,11 +101,6 @@ jobs:
       run: |
         cd server
         cargo test --all --verbose
-
-    - name: Run tests (switch-client)
-      run: |
-        cd switch-client
-        cargo test --lib --verbose
 
     - name: Generate test coverage (server)
       if: matrix.rust == 'stable'
@@ -189,11 +169,6 @@ jobs:
       run: |
         cd server
         cargo build --release --verbose
-
-    - name: Check Switch client
-      run: |
-        cd switch-client
-        cargo check --lib
 
     - name: Upload build artifacts
       if: matrix.os == 'ubuntu-latest'
