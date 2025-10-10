@@ -1,5 +1,5 @@
 // mDNS/UPnP service discovery using modern service discovery protocols
-#[cfg(feature = "discovery")]
+#[cfg_attr(not(feature = "discovery"), allow(unused_imports))]
 use crate::error::NetworkError;
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
