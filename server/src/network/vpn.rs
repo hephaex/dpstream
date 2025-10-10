@@ -141,7 +141,7 @@ impl VpnManager {
 
         // Start tailscaled if not already running
         let output = Command::new("sudo")
-            .args(&["systemctl", "start", "tailscaled"])
+            .args(["systemctl", "start", "tailscaled"])
             .output()
             .await
             .map_err(|e| {
@@ -166,7 +166,7 @@ impl VpnManager {
 
         let output = timeout(Duration::from_secs(30), async {
             Command::new("tailscale")
-                .args(&["up", "--auth-key", &self.config.auth_key])
+                .args(["up", "--auth-key", &self.config.auth_key])
                 .output()
                 .await
         })
@@ -188,7 +188,7 @@ impl VpnManager {
 
         // Set hostname
         let output = Command::new("tailscale")
-            .args(&["set", "--hostname", &self.config.hostname])
+            .args(["set", "--hostname", &self.config.hostname])
             .output()
             .await
             .map_err(|e| VpnError::Config(format!("Failed to set hostname: {}", e)))?;
@@ -202,7 +202,7 @@ impl VpnManager {
         if !self.config.advertise_routes.is_empty() {
             let routes = self.config.advertise_routes.join(",");
             let output = Command::new("tailscale")
-                .args(&["set", "--advertise-routes", &routes])
+                .args(["set", "--advertise-routes", &routes])
                 .output()
                 .await
                 .map_err(|e| VpnError::Config(format!("Failed to advertise routes: {}", e)))?;
@@ -218,7 +218,7 @@ impl VpnManager {
         // Configure DNS settings
         if self.config.accept_dns {
             let output = Command::new("tailscale")
-                .args(&["set", "--accept-dns"])
+                .args(["set", "--accept-dns"])
                 .output()
                 .await
                 .map_err(|e| VpnError::Config(format!("Failed to configure DNS: {}", e)))?;
@@ -265,7 +265,7 @@ impl VpnManager {
 
         let output = timeout(Duration::from_secs(10), async {
             Command::new("tailscale")
-                .args(&["status", "--json"])
+                .args(["status", "--json"])
                 .output()
                 .await
         })
@@ -390,7 +390,7 @@ impl VpnManager {
 
         let output = timeout(Duration::from_secs(5), async {
             Command::new("tailscale")
-                .args(&["ping", peer_ip])
+                .args(["ping", peer_ip])
                 .output()
                 .await
         })

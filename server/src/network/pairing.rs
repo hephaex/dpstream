@@ -23,6 +23,12 @@ pub struct PairingManager {
     pending_pairs: HashMap<String, PairingRequest>,
 }
 
+impl Default for PairingManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PairingManager {
     pub fn new() -> Self {
         Self {
@@ -67,7 +73,7 @@ impl PairingManager {
     pub fn verify_client(&self, client_id: &str, token: &str) -> bool {
         self.paired_clients
             .get(client_id)
-            .map_or(false, |stored_token| stored_token == token)
+            .is_some_and(|stored_token| stored_token == token)
     }
 
     fn generate_pin(&self) -> String {

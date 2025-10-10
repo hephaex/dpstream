@@ -344,7 +344,7 @@ pub struct ErrorEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ErrorEventType {
     /// New error occurred
-    ErrorOccurred(ErrorContext),
+    ErrorOccurred(Box<ErrorContext>),
     /// Recovery attempt started
     RecoveryStarted(String), // strategy name
     /// Recovery completed
@@ -478,7 +478,7 @@ impl ErrorRecoverySystem {
             let event = ErrorEvent {
                 event_id: Uuid::new_v4(),
                 correlation_id: correlation_id.clone(),
-                event_type: ErrorEventType::ErrorOccurred(error.clone()),
+                event_type: ErrorEventType::ErrorOccurred(Box::new(error.clone())),
                 timestamp: SystemTime::now(),
                 component: error.component.clone(),
                 details: error.details.clone(),
