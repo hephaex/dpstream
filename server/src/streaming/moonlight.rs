@@ -588,7 +588,7 @@ impl MoonlightServer {
         // NOTE: This is a stub implementation for minimal build
         // In a full implementation, this would handle streaming and control messages
         let mut buffer = vec![0u8; 1024];
-        while let Ok(_) = stream.readable().await {
+        while (stream.readable().await).is_ok() {
             match stream.try_read(&mut buffer) {
                 Ok(0) => break, // Connection closed
                 Ok(_n) => {
