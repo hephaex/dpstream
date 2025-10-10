@@ -1,7 +1,7 @@
 // mDNS/UPnP service discovery using modern service discovery protocols
-use crate::error::Result;
 #[cfg(feature = "discovery")]
 use crate::error::NetworkError;
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{debug, info, warn};
