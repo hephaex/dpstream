@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Input processing module for dpstream server
 //!
 //! Handles input events from Moonlight clients and routes them to Dolphin emulator

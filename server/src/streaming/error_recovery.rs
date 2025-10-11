@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Advanced error correlation and recovery system for production reliability
 //!
 //! Implements comprehensive error handling with correlation tracking, circuit breakers,

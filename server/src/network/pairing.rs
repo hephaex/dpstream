@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Client pairing and authentication
 use anyhow::Result;
 use serde::{Deserialize, Serialize};

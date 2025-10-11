@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Controller mapping and configuration system
 //!
 //! Provides flexible mapping between Switch controllers and GameCube/Wii controllers

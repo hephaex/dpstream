@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // mDNS/UPnP service discovery using modern service discovery protocols
 #[cfg_attr(not(feature = "discovery"), allow(unused_imports))]
 use crate::error::NetworkError;

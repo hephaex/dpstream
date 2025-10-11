@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Dolphin emulator input adapter
 //!
 //! Handles communication with Dolphin emulator for input injection

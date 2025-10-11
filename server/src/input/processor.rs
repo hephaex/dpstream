@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Input processing and transformation module
 //!
 //! Converts Moonlight input packets to Dolphin-compatible commands
