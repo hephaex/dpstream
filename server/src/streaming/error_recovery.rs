@@ -1026,8 +1026,8 @@ mod tests {
         assert!(breaker.is_request_allowed());
     }
 
-    #[test]
-    fn test_error_correlation_creation() {
+    #[tokio::test]
+    async fn test_error_correlation_creation() {
         let error = ErrorContext {
             error_id: Uuid::new_v4(),
             correlation_id: "test_correlation".to_string(),

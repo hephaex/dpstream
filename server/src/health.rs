@@ -114,26 +114,32 @@ impl HealthMonitor {
             return ServiceStatus::Healthy;
         }
 
-        let mut healthy_count = 0;
-        let mut total_count = 0;
+        let mut has_unhealthy = false;
+        let mut has_degraded = false;
+        let mut all_healthy = true;
 
         for check in checks.values() {
-            total_count += 1;
             match check.status {
-                ServiceStatus::Healthy => healthy_count += 1,
-                ServiceStatus::Unhealthy => return ServiceStatus::Unhealthy,
+                ServiceStatus::Healthy => {}
+                ServiceStatus::Unhealthy => {
+                    has_unhealthy = true;
+                    all_healthy = false;
+                }
                 ServiceStatus::Degraded => {
-                    // Continue to check other services
+                    has_degraded = true;
+                    all_healthy = false;
                 }
             }
         }
 
-        if healthy_count == total_count {
-            ServiceStatus::Healthy
-        } else if healthy_count > 0 {
-            ServiceStatus::Degraded
-        } else {
+        if has_unhealthy {
             ServiceStatus::Unhealthy
+        } else if has_degraded {
+            ServiceStatus::Degraded
+        } else if all_healthy {
+            ServiceStatus::Healthy
+        } else {
+            ServiceStatus::Healthy // Fallback, shouldn't reach here
         }
     }
 

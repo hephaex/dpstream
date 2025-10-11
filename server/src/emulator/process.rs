@@ -302,9 +302,10 @@ impl Drop for DolphinManager {
 mod tests {
     use super::*;
     use std::env;
+    use std::os::unix::fs::PermissionsExt;
 
     fn setup_test_env() {
-        env::set_var("DOLPHIN_PATH", "/usr/bin/true"); // Use /bin/true for testing
+        env::set_var("DOLPHIN_PATH", "/bin/sleep"); // Use /bin/sleep for testing
         env::set_var("ROM_PATH", "/tmp/test-roms");
         env::set_var("SAVE_PATH", "/tmp/test-saves");
         env::set_var("DOLPHIN_CONFIG_PATH", "/tmp/test-config");
@@ -313,7 +314,7 @@ mod tests {
 
     fn create_test_config() -> DolphinConfig {
         DolphinConfig {
-            executable_path: "/usr/bin/true".to_string(),
+            executable_path: "/bin/sleep".to_string(),
             rom_directory: "/tmp/test-roms".to_string(),
             save_directory: "/tmp/test-saves".to_string(),
             window_title: "Dolphin Test".to_string(),
@@ -349,14 +350,24 @@ mod tests {
     async fn test_process_lifecycle() {
         setup_test_env();
 
-        let config = create_test_config();
+        // Create a test executable that accepts any arguments and sleeps
+        let test_script = "/tmp/test-dolphin.sh";
+        std::fs::write(
+            test_script,
+            "#!/bin/sh\n# Test script that ignores all arguments and sleeps\nsleep 60\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(test_script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let mut config = create_test_config();
+        config.executable_path = test_script.to_string();
         let mut manager = DolphinManager::new(config).unwrap();
 
         // Create a dummy ROM file for testing
         std::fs::create_dir_all("/tmp/test-roms").ok();
         std::fs::write("/tmp/test-roms/test.iso", "dummy content").unwrap();
 
-        // Start game should work with /bin/true
+        // Start game should work with test script
         let result = manager.start_game("test.iso").await;
         assert!(
             result.is_ok(),
