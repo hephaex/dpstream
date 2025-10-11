@@ -18,7 +18,7 @@ use dpstream_server::{
 async fn test_server_initialization() -> Result<()> {
     let config = ServerConfig {
         bind_addr: "127.0.0.1".to_string(),
-        port: 0, // Let OS choose port
+        port: 47990, // Use fixed port for testing
         max_clients: 4,
         enable_encryption: false, // Disable for testing
         enable_authentication: false,
@@ -26,7 +26,7 @@ async fn test_server_initialization() -> Result<()> {
     };
 
     let server = MoonlightServer::new(config).await?;
-    assert!(server.port() > 0);
+    assert_eq!(server.port(), 47990);
 
     Ok(())
 }
@@ -66,9 +66,9 @@ async fn test_video_streaming_pipeline() -> Result<()> {
     // Generate test video frames
     let test_frames = generate_test_video_frames(720, 480, 30); // 30 frames at 720x480
 
-    // Send frames through pipeline
+    // Send frames through pipeline to specific client
     for frame in test_frames {
-        test_env.send_video_frame(frame).await?;
+        test_env.send_video_frame_to_client(&client_id, frame).await?;
     }
 
     // Verify frames were processed
