@@ -187,12 +187,14 @@ jobs:
         cd server
         cargo doc --all --no-deps --no-default-features
 
-    - name: Deploy to GitHub Pages
-      if: github.ref == 'refs/heads/main'
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./server/target/doc
+    # GitHub Pages deployment disabled - requires additional repository configuration
+    # To enable: Set up GitHub Pages in repository settings and use a PAT with repo scope
+    # - name: Deploy to GitHub Pages
+    #   if: github.ref == 'refs/heads/main'
+    #   uses: peaceiris/actions-gh-pages@v3
+    #   with:
+    #     personal_token: ${{ secrets.GH_PAT }}  # Requires PAT with repo scope
+    #     publish_dir: ./server/target/doc
 
   security:
     name: Security Analysis
