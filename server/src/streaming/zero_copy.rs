@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Zero-copy video pipeline for maximum performance
 //!
 //! Implements pre-allocated buffer pools and DMA-friendly memory management

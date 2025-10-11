@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Sunshine integration for streaming
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
