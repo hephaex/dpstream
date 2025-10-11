@@ -116,18 +116,15 @@ impl HealthMonitor {
 
         let mut has_unhealthy = false;
         let mut has_degraded = false;
-        let mut all_healthy = true;
 
         for check in checks.values() {
             match check.status {
                 ServiceStatus::Healthy => {}
                 ServiceStatus::Unhealthy => {
                     has_unhealthy = true;
-                    all_healthy = false;
                 }
                 ServiceStatus::Degraded => {
                     has_degraded = true;
-                    all_healthy = false;
                 }
             }
         }
@@ -136,10 +133,8 @@ impl HealthMonitor {
             ServiceStatus::Unhealthy
         } else if has_degraded {
             ServiceStatus::Degraded
-        } else if all_healthy {
-            ServiceStatus::Healthy
         } else {
-            ServiceStatus::Healthy // Fallback, shouldn't reach here
+            ServiceStatus::Healthy
         }
     }
 
