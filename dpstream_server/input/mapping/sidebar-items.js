@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ConsoleType"],"struct":["CalibrationData","ControllerMapping","GameProfile","MappingPresets"]};

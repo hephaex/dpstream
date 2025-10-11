@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AnalogStick","DolphinButton","DolphinCommand"],"struct":["InputProcessor","ProcessorStats"]};

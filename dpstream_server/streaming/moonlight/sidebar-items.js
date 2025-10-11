@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AudioCodec","InputEvent","SessionState"],"struct":["AudioConfig","AudioFrame","AudioStream","ClientCapabilities","ControllerInput","InputHandler","MoonlightServer","NegotiatedStreamConfig","PerformanceMonitor","ServerConfig","ServerStats","StreamConfig","StreamStats","StreamingSession","VideoFrame","VideoStream"]};

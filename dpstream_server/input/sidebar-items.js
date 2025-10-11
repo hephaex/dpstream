@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["dolphin","mapping","processor"],"struct":["InputStats","MoonlightInputPacket","ServerInputManager","TouchPoint"]};
