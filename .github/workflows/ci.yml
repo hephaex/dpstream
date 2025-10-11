@@ -284,6 +284,9 @@ jobs:
         asset_path: ./dpstream-${{ github.event.release.tag_name }}.tar.gz
         asset_name: dpstream-${{ github.event.release.tag_name }}.tar.gz
         asset_content_type: application/gzip
+      run: |
+        gh release upload ${{ github.event.release.tag_name }} \
+        ./dpstream-${{ github.event.release.tag_name }}.tar.gz
 
   notify:
     name: Notifications
