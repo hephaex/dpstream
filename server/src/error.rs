@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Centralized error handling for dpstream server
 use std::time::Duration;
 use thiserror::Error;

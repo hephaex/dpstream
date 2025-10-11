@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::error::{Result, VpnError};
 use serde::{Deserialize, Serialize};
 use std::env;

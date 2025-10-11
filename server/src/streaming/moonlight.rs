@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Moonlight protocol implementation for dpstream server
 //!
 //! Implements NVIDIA GameStream compatible streaming protocol for video and audio

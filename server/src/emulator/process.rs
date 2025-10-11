@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::error::{EmulatorError, Result};
 use std::env;
 use std::path::Path;
