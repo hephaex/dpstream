@@ -68,7 +68,9 @@ async fn test_video_streaming_pipeline() -> Result<()> {
 
     // Send frames through pipeline to specific client
     for frame in test_frames {
-        test_env.send_video_frame_to_client(&client_id, frame).await?;
+        test_env
+            .send_video_frame_to_client(&client_id, frame)
+            .await?;
     }
 
     // Verify frames were processed
