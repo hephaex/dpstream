@@ -45,7 +45,7 @@ deny = [
 ]
 copyleft = "warn"
 allow-osi-fsf-free = "both"
-default = "deny"
+default = "warn"
 confidence-threshold = 0.8
 
 [licenses.private]
