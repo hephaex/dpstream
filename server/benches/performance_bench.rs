@@ -35,14 +35,14 @@ fn bench_network_operations(c: &mut Criterion) {
     group.bench_function("ip_parsing", |b| {
         b.iter(|| {
             let ip = "192.168.1.1".parse::<std::net::IpAddr>();
-            criterion::black_box(ip);
+            let _ = criterion::black_box(ip);
         });
     });
 
     group.bench_function("hostname_resolution", |b| {
         b.iter(|| {
             let hostname = hostname::get();
-            criterion::black_box(hostname);
+            let _ = criterion::black_box(hostname);
         });
     });
 
@@ -70,7 +70,7 @@ fn bench_serialization(c: &mut Criterion) {
     group.bench_function("json_serialize", |b| {
         b.iter(|| {
             let json = serde_json::to_string(&test_data);
-            criterion::black_box(json);
+            let _ = criterion::black_box(json);
         });
     });
 
@@ -78,7 +78,7 @@ fn bench_serialization(c: &mut Criterion) {
     group.bench_function("json_deserialize", |b| {
         b.iter(|| {
             let data: Result<TestData, _> = serde_json::from_str(&json_data);
-            criterion::black_box(data);
+            let _ = criterion::black_box(data);
         });
     });
 
@@ -103,7 +103,7 @@ fn bench_async_operations(c: &mut Criterion) {
             rt.block_on(async {
                 let handle = tokio::spawn(async { 42 });
                 let result = handle.await;
-                criterion::black_box(result);
+                let _ = criterion::black_box(result);
             })
         });
     });
@@ -134,7 +134,7 @@ fn bench_streaming_performance(c: &mut Criterion) {
 
     group.bench_function("rtp_packet_parsing", |b| {
         // Mock RTP packet
-        let rtp_packet = vec![
+        let rtp_packet = [
             0x80, 0x60, 0x00, 0x01, // Version, PT, Sequence
             0x00, 0x00, 0x00, 0x10, // Timestamp
             0x12, 0x34, 0x56, 0x78, // SSRC
