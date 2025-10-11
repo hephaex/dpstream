@@ -8,6 +8,7 @@ use tracing::{debug, error, info, warn};
 
 /// Dolphin emulator configuration
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct DolphinConfig {
     pub executable_path: String,
     pub rom_directory: String,
@@ -183,6 +184,7 @@ impl DolphinManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_window_id(&self) -> Option<u64> {
         self.window_id
     }

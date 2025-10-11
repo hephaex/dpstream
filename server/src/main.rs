@@ -64,11 +64,11 @@ async fn main() -> Result<()> {
         port: env::var("SERVER_PORT")
             .unwrap_or_else(|_| "47989".to_string())
             .parse()
-            .map_err(|e| DpstreamError::Config(format!("Invalid SERVER_PORT: {}", e)))?,
+            .map_err(|e| DpstreamError::Config(format!("Invalid SERVER_PORT: {e}")))?,
         max_clients: env::var("MAX_CLIENTS")
             .unwrap_or_else(|_| "4".to_string())
             .parse()
-            .map_err(|e| DpstreamError::Config(format!("Invalid MAX_CLIENTS: {}", e)))?,
+            .map_err(|e| DpstreamError::Config(format!("Invalid MAX_CLIENTS: {e}")))?,
         enable_encryption: true,
         enable_authentication: true,
         stream_timeout_ms: 30000,
@@ -202,13 +202,12 @@ fn init_logging() -> Result<()> {
     // Create a file appender for persistent logs
     let log_dir = std::path::Path::new("logs");
     if !log_dir.exists() {
-        std::fs::create_dir_all(log_dir).map_err(|e| {
-            DpstreamError::Internal(format!("Failed to create log directory: {}", e))
-        })?;
+        std::fs::create_dir_all(log_dir)
+            .map_err(|e| DpstreamError::Internal(format!("Failed to create log directory: {e}")))?;
     }
 
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-    let log_file = format!("logs/dpstream_{}.log", timestamp);
+    let log_file = format!("logs/dpstream_{timestamp}.log");
 
     // Configure logging
     tracing_subscriber::registry()
@@ -222,7 +221,7 @@ fn init_logging() -> Result<()> {
         .with(
             tracing_subscriber::fmt::layer()
                 .with_writer(std::fs::File::create(&log_file).map_err(|e| {
-                    DpstreamError::Internal(format!("Failed to create log file: {}", e))
+                    DpstreamError::Internal(format!("Failed to create log file: {e}"))
                 })?)
                 .with_target(true)
                 .with_thread_ids(true)
@@ -230,7 +229,7 @@ fn init_logging() -> Result<()> {
         )
         .with(tracing_subscriber::EnvFilter::new(&log_level))
         .try_init()
-        .map_err(|e| DpstreamError::Internal(format!("Failed to initialize logging: {}", e)))?;
+        .map_err(|e| DpstreamError::Internal(format!("Failed to initialize logging: {e}")))?;
 
     info!("Logging initialized");
     info!("Log level: {}", log_level);

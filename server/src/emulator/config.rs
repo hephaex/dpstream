@@ -51,6 +51,7 @@ pub struct GeneralConfig {
     pub auto_update: bool,
 }
 
+#[allow(dead_code)]
 impl DolphinConfig {
     pub fn default_streaming() -> Self {
         let mut players = HashMap::new();

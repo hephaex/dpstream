@@ -13,6 +13,7 @@ use dpstream_server::{
 
 /// Test environment for integration testing
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct TestEnvironment {
     pub server: Arc<Mutex<MoonlightServer>>,
     pub sessions: Arc<Mutex<HashMap<Uuid, TestSession>>>,
@@ -21,6 +22,7 @@ pub struct TestEnvironment {
 }
 
 /// Individual test session data
+#[allow(dead_code)]
 pub struct TestSession {
     pub client_id: Uuid,
     pub client_name: String,
@@ -31,6 +33,7 @@ pub struct TestSession {
 }
 
 /// Network condition simulator for testing resilience
+#[allow(dead_code)]
 pub struct NetworkSimulator {
     pub packet_loss_rate: f64,
     pub additional_latency_ms: u64,
@@ -57,12 +60,14 @@ pub struct AudioMetrics {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct MemoryUsage {
     pub heap_usage_mb: u64,
     pub stack_usage_kb: u64,
     pub gpu_memory_mb: u64,
 }
 
+#[allow(dead_code)]
 pub struct MetricsCollector {
     pub quality_metrics: Arc<Mutex<HashMap<Uuid, QualityMetrics>>>,
     pub audio_metrics: Arc<Mutex<HashMap<Uuid, AudioMetrics>>>,
@@ -300,7 +305,7 @@ impl TestEnvironment {
     }
 
     /// Internal metrics processing
-    async fn process_frame_metrics(&self, frame: &VideoFrame) {
+    async fn process_frame_metrics(&self, _frame: &VideoFrame) {
         // Update quality metrics based on frame processing
         let mut quality_metrics = self.metrics_collector.quality_metrics.lock().unwrap();
         for metrics in quality_metrics.values_mut() {
@@ -311,7 +316,7 @@ impl TestEnvironment {
         }
     }
 
-    async fn process_audio_metrics(&self, sample: &AudioFrame) {
+    async fn process_audio_metrics(&self, _sample: &AudioFrame) {
         // Update audio metrics
         let mut audio_metrics = self.metrics_collector.audio_metrics.lock().unwrap();
         for metrics in audio_metrics.values_mut() {

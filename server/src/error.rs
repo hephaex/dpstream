@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// Main error type for dpstream server operations with enhanced error codes
 #[derive(Error, Debug)]
+#[allow(dead_code)]
 pub enum DpstreamError {
     #[error("Network error: {0}")]
     Network(#[from] NetworkError),
@@ -51,6 +52,7 @@ pub enum DpstreamError {
     },
 }
 
+#[allow(dead_code)]
 impl DpstreamError {
     /// Get error code for programmatic handling
     pub fn error_code(&self) -> u32 {
@@ -422,6 +424,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 impl DpstreamError {
     /// Get suggested recovery actions
     pub fn recovery_suggestions(&self) -> Vec<String> {

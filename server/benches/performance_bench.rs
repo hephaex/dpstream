@@ -2,8 +2,8 @@
 //!
 //! Benchmarks key performance-critical operations
 
-use cache_padded::CachePadded;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use crossbeam_utils::CachePadded;
 use dashmap::DashMap;
 use flume::{bounded, unbounded};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -91,16 +91,20 @@ fn bench_async_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("async_operations");
 
     group.bench_function("tokio_sleep", |b| {
-        b.to_async(&rt).iter(|| async {
-            tokio::time::sleep(Duration::from_nanos(1)).await;
+        b.iter(|| {
+            rt.block_on(async {
+                tokio::time::sleep(Duration::from_nanos(1)).await;
+            })
         });
     });
 
     group.bench_function("tokio_spawn", |b| {
-        b.to_async(&rt).iter(|| async {
-            let handle = tokio::spawn(async { 42 });
-            let result = handle.await;
-            criterion::black_box(result);
+        b.iter(|| {
+            rt.block_on(async {
+                let handle = tokio::spawn(async { 42 });
+                let result = handle.await;
+                criterion::black_box(result);
+            })
         });
     });
 
@@ -166,7 +170,7 @@ fn bench_optimized_data_structures(c: &mut Criterion) {
         b.iter(|| {
             let mut guard = map.lock().unwrap();
             for i in 0..100 {
-                guard.insert(i, format!("value_{}", i));
+                guard.insert(i, format!("value_{i}"));
             }
             guard.clear();
         });
@@ -176,7 +180,7 @@ fn bench_optimized_data_structures(c: &mut Criterion) {
         let map = dash_map.clone();
         b.iter(|| {
             for i in 0..100 {
-                map.insert(i, format!("value_{}", i));
+                map.insert(i, format!("value_{i}"));
             }
             map.clear();
         });
@@ -219,34 +223,38 @@ fn bench_channel_performance(c: &mut Criterion) {
     let mut group = c.benchmark_group("channel_performance");
 
     group.bench_function("flume_bounded", |b| {
-        b.to_async(&rt).iter(|| async {
-            let (tx, rx) = bounded(1000);
+        b.iter(|| {
+            rt.block_on(async {
+                let (tx, rx) = bounded(1000);
 
-            // Producer
-            for i in 0..1000 {
-                tx.send_async(i).await.unwrap();
-            }
+                // Producer
+                for i in 0..1000 {
+                    tx.send_async(i).await.unwrap();
+                }
 
-            // Consumer
-            for _ in 0..1000 {
-                black_box(rx.recv_async().await.unwrap());
-            }
+                // Consumer
+                for _ in 0..1000 {
+                    black_box(rx.recv_async().await.unwrap());
+                }
+            })
         });
     });
 
     group.bench_function("flume_unbounded", |b| {
-        b.to_async(&rt).iter(|| async {
-            let (tx, rx) = unbounded();
+        b.iter(|| {
+            rt.block_on(async {
+                let (tx, rx) = unbounded();
 
-            // Producer
-            for i in 0..1000 {
-                tx.send_async(i).await.unwrap();
-            }
+                // Producer
+                for i in 0..1000 {
+                    tx.send_async(i).await.unwrap();
+                }
 
-            // Consumer
-            for _ in 0..1000 {
-                black_box(rx.recv_async().await.unwrap());
-            }
+                // Consumer
+                for _ in 0..1000 {
+                    black_box(rx.recv_async().await.unwrap());
+                }
+            })
         });
     });
 
@@ -260,32 +268,34 @@ fn bench_enterprise_concurrency(c: &mut Criterion) {
 
     // Simulate high-throughput session management
     group.bench_function("concurrent_session_management", |b| {
-        b.to_async(&rt).iter(|| async {
-            let sessions = Arc::new(DashMap::new());
+        b.iter(|| {
+            rt.block_on(async {
+                let sessions = Arc::new(DashMap::new());
 
-            // Simulate concurrent session operations
-            let tasks: Vec<_> = (0..100)
-                .map(|i| {
-                    let sessions = sessions.clone();
-                    tokio::spawn(async move {
-                        // Insert session
-                        sessions.insert(i, format!("session_{}", i));
+                // Simulate concurrent session operations
+                let tasks: Vec<_> = (0..100)
+                    .map(|i| {
+                        let sessions = sessions.clone();
+                        tokio::spawn(async move {
+                            // Insert session
+                            sessions.insert(i, format!("session_{i}"));
 
-                        // Read session
-                        black_box(sessions.get(&i));
+                            // Read session
+                            black_box(sessions.get(&i));
 
-                        // Update session
-                        sessions.insert(i, format!("updated_session_{}", i));
+                            // Update session
+                            sessions.insert(i, format!("updated_session_{i}"));
 
-                        // Remove session
-                        sessions.remove(&i);
+                            // Remove session
+                            sessions.remove(&i);
+                        })
                     })
-                })
-                .collect();
+                    .collect();
 
-            for task in tasks {
-                task.await.unwrap();
-            }
+                for task in tasks {
+                    task.await.unwrap();
+                }
+            })
         });
     });
 

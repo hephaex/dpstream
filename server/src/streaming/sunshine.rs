@@ -37,6 +37,7 @@ pub struct ClientInfo {
     pub connected_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[allow(dead_code)]
 pub struct DolphinStreamHost {
     config: StreamConfig,
     active_clients: HashMap<String, ClientInfo>,
@@ -45,6 +46,7 @@ pub struct DolphinStreamHost {
     tailscale_ip: String,
 }
 
+#[allow(dead_code)]
 impl DolphinStreamHost {
     pub fn new(config: StreamConfig, tailscale_ip: String) -> Result<Self> {
         info!("Initializing Dolphin Stream Host");
@@ -256,6 +258,7 @@ impl Drop for DolphinStreamHost {
 }
 
 // Integration with dpstream server
+#[allow(dead_code)]
 impl DolphinStreamHost {
     pub async fn handle_moonlight_request(
         &mut self,

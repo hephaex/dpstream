@@ -13,6 +13,7 @@ use std::sync::Arc;
 /// Zero-copy video buffer with pre-allocated memory pools
 #[repr(align(64))] // Cache line aligned for optimal performance
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ZeroCopyVideoBuffer {
     /// Pre-allocated video data aligned for DMA operations
     data: *mut u8,
@@ -31,6 +32,7 @@ pub struct ZeroCopyVideoBuffer {
 unsafe impl Send for ZeroCopyVideoBuffer {}
 unsafe impl Sync for ZeroCopyVideoBuffer {}
 
+#[allow(dead_code)]
 impl ZeroCopyVideoBuffer {
     /// Create a new zero-copy buffer with specified capacity
     pub fn new(capacity: usize, buffer_id: u64, pool_id: u32) -> Result<Self, PoolError> {
@@ -138,6 +140,7 @@ struct BufferPoolTier {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PoolConfig {
     /// Number of buffers per tier
     pub buffers_per_tier: usize,
@@ -175,6 +178,7 @@ pub struct PoolStatistics {
     allocation_failures: AtomicUsize,
 }
 
+#[allow(dead_code)]
 impl VideoBufferPool {
     /// Create a new video buffer pool with specified configuration
     pub fn new(config: PoolConfig) -> Result<Self, Box<dyn std::error::Error>> {
@@ -336,6 +340,7 @@ impl VideoBufferPool {
 
 /// Errors that can occur during buffer pool operations
 #[derive(Debug, thiserror::Error)]
+#[allow(dead_code)]
 pub enum PoolError {
     #[error("No available buffers in any tier")]
     NoAvailableBuffers,
