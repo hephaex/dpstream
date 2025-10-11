@@ -239,6 +239,7 @@ jobs:
         log-level: warn
         command: check
         arguments: --workspace
+        manifest-path: ./server/Cargo.toml
 
   release:
     name: Create Release
