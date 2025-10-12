@@ -276,17 +276,11 @@ jobs:
         tar -czf dpstream-${{ github.event.release.tag_name }}.tar.gz release-package/
 
     - name: Upload release assets
-      uses: actions/upload-release-asset@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./dpstream-${{ github.event.release.tag_name }}.tar.gz
-        asset_name: dpstream-${{ github.event.release.tag_name }}.tar.gz
-        asset_content_type: application/gzip
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         gh release upload ${{ github.event.release.tag_name }} \
-        ./dpstream-${{ github.event.release.tag_name }}.tar.gz
+          ./dpstream-${{ github.event.release.tag_name }}.tar.gz --clobber
 
   notify:
     name: Notifications
